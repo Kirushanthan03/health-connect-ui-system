@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +9,7 @@ import { appointmentsAPI } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog';
+import AppointmentDetailDialog from '@/components/appointments/AppointmentDetailDialog';
 
 interface Appointment {
   id: number;
@@ -30,6 +32,8 @@ const Appointments = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showNewAppointmentDialog, setShowNewAppointmentDialog] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
@@ -92,6 +96,11 @@ const Appointments = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const handleAppointmentClick = (appointment: Appointment) => {
+    setSelectedAppointment(appointment);
+    setShowDetailDialog(true);
   };
 
   const getStatusBadgeVariant = (status: string) => {
@@ -193,7 +202,8 @@ const Appointments = () => {
                 filteredAppointments.map((appointment) => (
                   <div
                     key={appointment.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => handleAppointmentClick(appointment)}
                   >
                     <div className="flex-1">
                       <div className="flex items-center space-x-4">
@@ -218,7 +228,7 @@ const Appointments = () => {
                           {appointment.status}
                         </Badge>
                         {canUpdateStatus(appointment.status) && (
-                          <div className="flex gap-1">
+                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                             {appointment.status === 'SCHEDULED' && (
                               <>
                                 <Button
@@ -261,6 +271,13 @@ const Appointments = () => {
           open={showNewAppointmentDialog}
           onOpenChange={setShowNewAppointmentDialog}
           onAppointmentCreated={fetchAppointments}
+        />
+
+        <AppointmentDetailDialog
+          open={showDetailDialog}
+          onOpenChange={setShowDetailDialog}
+          appointment={selectedAppointment}
+          onAppointmentUpdated={fetchAppointments}
         />
       </div>
     </Layout>

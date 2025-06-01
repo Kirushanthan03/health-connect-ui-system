@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog';
+import AppointmentDetailDialog from '@/components/appointments/AppointmentDetailDialog';
 
 interface CalendarAppointment {
   id: number;
@@ -16,6 +18,7 @@ interface CalendarAppointment {
   time: string;
   status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   notes?: string;
+  date: string;
 }
 
 const Calendar = () => {
@@ -26,10 +29,13 @@ const Calendar = () => {
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
+  const [showNewAppointmentDialog, setShowNewAppointmentDialog] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<CalendarAppointment | null>(null);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
 
   useEffect(() => {
     fetchAppointmentsForDate(selectedDate);
-  }, [selectedDate]);
+  }, [selectedDate, viewMode]);
 
   const fetchAppointmentsForDate = async (date: Date) => {
     try {
@@ -43,7 +49,8 @@ const Calendar = () => {
           department: 'Cardiology',
           time: '09:00',
           status: 'SCHEDULED',
-          notes: 'Regular checkup'
+          notes: 'Regular checkup',
+          date: date.toISOString().split('T')[0]
         },
         {
           id: 2,
@@ -52,7 +59,8 @@ const Calendar = () => {
           department: 'Neurology',
           time: '10:30',
           status: 'IN_PROGRESS',
-          notes: 'Follow-up consultation'
+          notes: 'Follow-up consultation',
+          date: date.toISOString().split('T')[0]
         },
         {
           id: 3,
@@ -61,7 +69,8 @@ const Calendar = () => {
           department: 'Pediatrics',
           time: '14:00',
           status: 'SCHEDULED',
-          notes: 'Vaccination appointment'
+          notes: 'Vaccination appointment',
+          date: date.toISOString().split('T')[0]
         },
         {
           id: 4,
@@ -70,11 +79,11 @@ const Calendar = () => {
           department: 'Emergency',
           time: '16:15',
           status: 'COMPLETED',
-          notes: 'Emergency consultation'
+          notes: 'Emergency consultation',
+          date: date.toISOString().split('T')[0]
         }
       ];
       
-      // Filter appointments based on selected date if needed
       setAppointments(mockAppointments);
     } catch (error) {
       console.error('Error fetching appointments:', error);
@@ -114,6 +123,237 @@ const Calendar = () => {
     return appointments.find(apt => apt.time === time);
   };
 
+  const handleAppointmentClick = (appointment: CalendarAppointment) => {
+    setSelectedAppointment(appointment);
+    setShowDetailDialog(true);
+  };
+
+  const getWeekDates = (date: Date) => {
+    const week = [];
+    const startOfWeek = new Date(date);
+    const day = startOfWeek.getDay();
+    const diff = startOfWeek.getDate() - day;
+    startOfWeek.setDate(diff);
+
+    for (let i = 0; i < 7; i++) {
+      const weekDate = new Date(startOfWeek);
+      weekDate.setDate(startOfWeek.getDate() + i);
+      week.push(weekDate);
+    }
+    return week;
+  };
+
+  const getMonthDates = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const dates = [];
+
+    for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+      dates.push(new Date(d));
+    }
+    return dates;
+  };
+
+  const renderDayView = () => (
+    <Card className="lg:col-span-3">
+      <CardHeader>
+        <CardTitle>
+          {selectedDate.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })}
+        </CardTitle>
+        <CardDescription>
+          {appointments.length} appointments scheduled for this day
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {timeSlots.map((timeSlot) => {
+            const appointment = getAppointmentForTimeSlot(timeSlot);
+            return (
+              <div
+                key={timeSlot}
+                className={`flex items-center p-3 border rounded-lg transition-colors cursor-pointer ${
+                  appointment 
+                    ? 'bg-blue-50 border-blue-200 hover:bg-blue-100' 
+                    : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                }`}
+                onClick={() => appointment && handleAppointmentClick(appointment)}
+              >
+                <div className="w-20 text-sm font-medium text-gray-600">
+                  {timeSlot}
+                </div>
+                
+                {appointment ? (
+                  <div className="flex-1 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{appointment.patientName}</p>
+                      <p className="text-sm text-gray-600">
+                        {appointment.doctorName} • {appointment.department}
+                      </p>
+                      {appointment.notes && (
+                        <p className="text-sm text-gray-500 mt-1">{appointment.notes}</p>
+                      )}
+                    </div>
+                    <Badge variant={getStatusBadgeVariant(appointment.status)}>
+                      {appointment.status}
+                    </Badge>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-between">
+                    <p className="text-gray-400 italic">Available</p>
+                    {(user?.role === 'ADMIN' || user?.role === 'HELPDESK') && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowNewAppointmentDialog(true);
+                        }}
+                      >
+                        Book Appointment
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderWeekView = () => {
+    const weekDates = getWeekDates(selectedDate);
+    
+    return (
+      <Card className="lg:col-span-3">
+        <CardHeader>
+          <CardTitle>Week View</CardTitle>
+          <CardDescription>
+            {weekDates[0].toLocaleDateString()} - {weekDates[6].toLocaleDateString()}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-8 gap-2">
+            <div className="font-medium text-sm text-gray-600">Time</div>
+            {weekDates.map((date, index) => (
+              <div key={index} className="font-medium text-sm text-center">
+                <div>{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                <div>{date.getDate()}</div>
+              </div>
+            ))}
+            
+            {timeSlots.slice(0, 12).map((time) => (
+              <React.Fragment key={time}>
+                <div className="text-xs text-gray-500 py-2">{time}</div>
+                {weekDates.map((date, dateIndex) => {
+                  const dayAppointments = appointments.filter(apt => 
+                    apt.date === date.toISOString().split('T')[0] && apt.time === time
+                  );
+                  return (
+                    <div key={dateIndex} className="min-h-[40px] border rounded p-1">
+                      {dayAppointments.map(apt => (
+                        <div 
+                          key={apt.id}
+                          className="text-xs bg-blue-100 rounded p-1 cursor-pointer hover:bg-blue-200"
+                          onClick={() => handleAppointmentClick(apt)}
+                        >
+                          {apt.patientName}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderMonthView = () => {
+    const monthDates = getMonthDates(selectedDate);
+    const weeks = [];
+    
+    for (let i = 0; i < monthDates.length; i += 7) {
+      weeks.push(monthDates.slice(i, i + 7));
+    }
+
+    return (
+      <Card className="lg:col-span-3">
+        <CardHeader>
+          <CardTitle>
+            {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </CardTitle>
+          <CardDescription>Monthly calendar view</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-7 gap-2">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <div key={day} className="font-medium text-center text-sm text-gray-600 p-2">
+                {day}
+              </div>
+            ))}
+            
+            {monthDates.map((date, index) => {
+              const dayAppointments = appointments.filter(apt => 
+                apt.date === date.toISOString().split('T')[0]
+              );
+              
+              return (
+                <div 
+                  key={index} 
+                  className={`min-h-[100px] border rounded p-2 cursor-pointer hover:bg-gray-50 ${
+                    date.toDateString() === selectedDate.toDateString() ? 'bg-blue-50 border-blue-300' : ''
+                  }`}
+                  onClick={() => setSelectedDate(date)}
+                >
+                  <div className="font-medium text-sm">{date.getDate()}</div>
+                  <div className="space-y-1 mt-1">
+                    {dayAppointments.slice(0, 3).map(apt => (
+                      <div 
+                        key={apt.id}
+                        className="text-xs bg-blue-100 rounded p-1 cursor-pointer hover:bg-blue-200"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAppointmentClick(apt);
+                        }}
+                      >
+                        {apt.patientName}
+                      </div>
+                    ))}
+                    {dayAppointments.length > 3 && (
+                      <div className="text-xs text-gray-500">+{dayAppointments.length - 3} more</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderCurrentView = () => {
+    switch (viewMode) {
+      case 'week':
+        return renderWeekView();
+      case 'month':
+        return renderMonthView();
+      default:
+        return renderDayView();
+    }
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -136,6 +376,11 @@ const Calendar = () => {
             <p className="text-gray-600">View and manage appointments by date</p>
           </div>
           <div className="flex items-center gap-2">
+            {(user?.role === 'ADMIN' || user?.role === 'HELPDESK') && (
+              <Button onClick={() => setShowNewAppointmentDialog(true)}>
+                New Appointment
+              </Button>
+            )}
             {['day', 'week', 'month'].map((mode) => (
               <Button
                 key={mode}
@@ -150,7 +395,6 @@ const Calendar = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Calendar Picker */}
           <Card className="lg:col-span-1">
             <CardHeader>
               <CardTitle>Select Date</CardTitle>
@@ -186,76 +430,7 @@ const Calendar = () => {
             </CardContent>
           </Card>
 
-          {/* Day View */}
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <CardTitle>
-                {selectedDate.toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
-              </CardTitle>
-              <CardDescription>
-                {appointments.length} appointments scheduled for this day
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {timeSlots.map((timeSlot) => {
-                  const appointment = getAppointmentForTimeSlot(timeSlot);
-                  return (
-                    <div
-                      key={timeSlot}
-                      className={`flex items-center p-3 border rounded-lg transition-colors ${
-                        appointment 
-                          ? 'bg-blue-50 border-blue-200 hover:bg-blue-100' 
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                      }`}
-                    >
-                      <div className="w-20 text-sm font-medium text-gray-600">
-                        {timeSlot}
-                      </div>
-                      
-                      {appointment ? (
-                        <div className="flex-1 flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{appointment.patientName}</p>
-                            <p className="text-sm text-gray-600">
-                              {appointment.doctorName} • {appointment.department}
-                            </p>
-                            {appointment.notes && (
-                              <p className="text-sm text-gray-500 mt-1">{appointment.notes}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={getStatusBadgeVariant(appointment.status)}>
-                              {appointment.status}
-                            </Badge>
-                            {(user?.role === 'ADMIN' || user?.role === 'DOCTOR') && (
-                              <Button size="sm" variant="outline">
-                                Edit
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex-1 flex items-center justify-between">
-                          <p className="text-gray-400 italic">Available</p>
-                          {(user?.role === 'ADMIN' || user?.role === 'HELPDESK') && (
-                            <Button size="sm" variant="outline">
-                              Book Appointment
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+          {renderCurrentView()}
         </div>
 
         {/* Today's Summary */}
@@ -297,6 +472,19 @@ const Calendar = () => {
             </CardContent>
           </Card>
         </div>
+
+        <NewAppointmentDialog
+          open={showNewAppointmentDialog}
+          onOpenChange={setShowNewAppointmentDialog}
+          onAppointmentCreated={() => fetchAppointmentsForDate(selectedDate)}
+        />
+
+        <AppointmentDetailDialog
+          open={showDetailDialog}
+          onOpenChange={setShowDetailDialog}
+          appointment={selectedAppointment}
+          onAppointmentUpdated={() => fetchAppointmentsForDate(selectedDate)}
+        />
       </div>
     </Layout>
   );

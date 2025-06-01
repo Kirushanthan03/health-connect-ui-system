@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { appointmentsAPI } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog';
 
 interface Appointment {
   id: number;
@@ -29,6 +29,7 @@ const Appointments = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [showNewAppointmentDialog, setShowNewAppointmentDialog] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
@@ -142,7 +143,9 @@ const Appointments = () => {
             <p className="text-gray-600">Manage and track appointments</p>
           </div>
           {(user?.role === 'ADMIN' || user?.role === 'HELPDESK') && (
-            <Button>New Appointment</Button>
+            <Button onClick={() => setShowNewAppointmentDialog(true)}>
+              New Appointment
+            </Button>
           )}
         </div>
 
@@ -253,6 +256,12 @@ const Appointments = () => {
             </div>
           </CardContent>
         </Card>
+
+        <NewAppointmentDialog
+          open={showNewAppointmentDialog}
+          onOpenChange={setShowNewAppointmentDialog}
+          onAppointmentCreated={fetchAppointments}
+        />
       </div>
     </Layout>
   );

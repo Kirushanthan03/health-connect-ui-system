@@ -129,6 +129,10 @@ const Appointments = () => {
     return false;
   };
 
+  const canCreateAppointment = () => {
+    return user?.role === 'ADMIN' || user?.role === 'HELPDESK';
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -151,7 +155,7 @@ const Appointments = () => {
             <h1 className="text-3xl font-bold text-gray-900">Appointments</h1>
             <p className="text-gray-600">Manage and track appointments</p>
           </div>
-          {(user?.role === 'ADMIN' || user?.role === 'HELPDESK') && (
+          {canCreateAppointment() && (
             <Button onClick={() => setShowNewAppointmentDialog(true)}>
               New Appointment
             </Button>

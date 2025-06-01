@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -126,6 +125,10 @@ const Calendar = () => {
   const handleAppointmentClick = (appointment: CalendarAppointment) => {
     setSelectedAppointment(appointment);
     setShowDetailDialog(true);
+  };
+
+  const canCreateAppointment = () => {
+    return user?.role === 'ADMIN' || user?.role === 'HELPDESK';
   };
 
   const getWeekDates = (date: Date) => {
@@ -376,7 +379,7 @@ const Calendar = () => {
             <p className="text-gray-600">View and manage appointments by date</p>
           </div>
           <div className="flex items-center gap-2">
-            {(user?.role === 'ADMIN' || user?.role === 'HELPDESK') && (
+            {canCreateAppointment() && (
               <Button onClick={() => setShowNewAppointmentDialog(true)}>
                 New Appointment
               </Button>

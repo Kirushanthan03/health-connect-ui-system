@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -75,6 +74,26 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
     return false;
   };
 
+  const getAvailableStatuses = () => {
+    if (user?.role === 'ADMIN') {
+      return ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+    }
+    if (user?.role === 'DOCTOR') {
+      if (appointment.status === 'SCHEDULED') {
+        return ['SCHEDULED', 'IN_PROGRESS', 'CANCELLED'];
+      }
+      if (appointment.status === 'IN_PROGRESS') {
+        return ['IN_PROGRESS', 'COMPLETED'];
+      }
+    }
+    if (user?.role === 'HELPDESK') {
+      if (appointment.status === 'SCHEDULED') {
+        return ['SCHEDULED', 'CANCELLED'];
+      }
+    }
+    return [appointment.status];
+  };
+
   const handleUpdateAppointment = async () => {
     setIsLoading(true);
     try {
@@ -123,26 +142,6 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const getAvailableStatuses = () => {
-    if (user?.role === 'ADMIN') {
-      return ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
-    }
-    if (user?.role === 'DOCTOR') {
-      if (appointment.status === 'SCHEDULED') {
-        return ['SCHEDULED', 'IN_PROGRESS', 'CANCELLED'];
-      }
-      if (appointment.status === 'IN_PROGRESS') {
-        return ['IN_PROGRESS', 'COMPLETED'];
-      }
-    }
-    if (user?.role === 'HELPDESK') {
-      if (appointment.status === 'SCHEDULED') {
-        return ['SCHEDULED', 'CANCELLED'];
-      }
-    }
-    return [appointment.status];
   };
 
   return (

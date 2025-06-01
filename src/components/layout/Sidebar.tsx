@@ -1,37 +1,48 @@
 
 import React from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
+import { 
+  Sidebar, 
+  SidebarContent, 
+  SidebarGroup, 
+  SidebarGroupContent, 
+  SidebarGroupLabel, 
+  SidebarMenu, 
+  SidebarMenuButton, 
   SidebarMenuItem,
+  SidebarHeader,
+  SidebarFooter
 } from '@/components/ui/sidebar';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
 const AppSidebar = () => {
   const { state, logout } = useAuth();
   const { user } = state;
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Define menu items based on user role
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   const getMenuItems = () => {
     const baseItems = [
       {
         title: "Dashboard",
         url: "/dashboard",
-        icon: "🏥",
+        icon: "🏠",
       },
       {
         title: "Appointments",
         url: "/appointments",
         icon: "📅",
+      },
+      {
+        title: "Calendar",
+        url: "/calendar",
+        icon: "🗓️",
       },
     ];
 
@@ -39,14 +50,19 @@ const AppSidebar = () => {
       return [
         ...baseItems,
         {
-          title: "Departments",
-          url: "/departments",
-          icon: "🏢",
+          title: "Patients",
+          url: "/patients",
+          icon: "👥",
         },
         {
           title: "Users",
           url: "/users",
-          icon: "👥",
+          icon: "👤",
+        },
+        {
+          title: "Departments",
+          url: "/departments",
+          icon: "🏥",
         },
         {
           title: "Reports",
@@ -60,14 +76,14 @@ const AppSidebar = () => {
       return [
         ...baseItems,
         {
-          title: "My Schedule",
-          url: "/schedule",
-          icon: "⏰",
+          title: "My Patients",
+          url: "/patients",
+          icon: "👥",
         },
         {
-          title: "Patients",
-          url: "/patients",
-          icon: "👤",
+          title: "Reports",
+          url: "/reports",
+          icon: "📊",
         },
       ];
     }
@@ -76,14 +92,14 @@ const AppSidebar = () => {
       return [
         ...baseItems,
         {
-          title: "Patient Registration",
-          url: "/register-patient",
-          icon: "📝",
+          title: "Patients",
+          url: "/patients",
+          icon: "👥",
         },
         {
-          title: "Doctor Availability",
-          url: "/availability",
-          icon: "👨‍⚕️",
+          title: "Departments",
+          url: "/departments",
+          icon: "🏥",
         },
       ];
     }
@@ -94,15 +110,15 @@ const AppSidebar = () => {
   const menuItems = getMenuItems();
 
   return (
-    <Sidebar className="border-r border-gray-200">
-      <SidebarHeader className="p-4">
+    <Sidebar className="border-r bg-white">
+      <SidebarHeader className="p-4 border-b">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">H</span>
+          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+            <span className="text-white font-semibold text-lg">H</span>
           </div>
           <div>
-            <h2 className="font-semibold text-lg">HealthCare</h2>
-            <p className="text-sm text-gray-500">Management System</p>
+            <h2 className="text-lg font-semibold text-gray-900">Hospital</h2>
+            <p className="text-sm text-gray-600">Management System</p>
           </div>
         </div>
       </SidebarHeader>
@@ -114,8 +130,18 @@ const AppSidebar = () => {
             <SidebarMenu>
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <a href={item.url} className="flex items-center space-x-3">
+                  <SidebarMenuButton 
+                    asChild
+                    isActive={location.pathname === item.url}
+                  >
+                    <a 
+                      href={item.url}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigate(item.url);
+                      }}
+                      className="flex items-center space-x-3"
+                    >
                       <span className="text-lg">{item.icon}</span>
                       <span>{item.title}</span>
                     </a>
@@ -127,23 +153,28 @@ const AppSidebar = () => {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4">
-        <div className="flex items-center space-x-3 mb-4">
-          <Avatar>
-            <AvatarFallback>
+      <SidebarFooter className="p-4 border-t">
+        <div className="space-y-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
               {user?.firstName?.[0]}{user?.lastName?.[0]}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium truncate">
-              {user?.firstName} {user?.lastName}
-            </p>
-            <p className="text-sm text-gray-500 truncate">{user?.role}</p>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {user?.firstName} {user?.lastName}
+              </p>
+              <p className="text-xs text-gray-500 truncate">{user?.role}</p>
+            </div>
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleLogout}
+            className="w-full"
+          >
+            Sign Out
+          </Button>
         </div>
-        <Button variant="outline" onClick={logout} className="w-full">
-          Sign Out
-        </Button>
       </SidebarFooter>
     </Sidebar>
   );

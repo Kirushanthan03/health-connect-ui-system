@@ -3,8 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { appointmentsAPI } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 
 interface Appointment {
   id: number;
@@ -21,14 +25,41 @@ const Dashboard = () => {
   const { state } = useAuth();
   const { user } = state;
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [stats, setStats] = useState({
     total: 0,
     scheduled: 0,
     completed: 0,
     cancelled: 0,
+    inProgress: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+
+  // Chart data
+  const departmentData = [
+    { name: 'Cardiology', value: 32, color: '#1976d2' },
+    { name: 'Neurology', value: 28, color: '#4caf50' },
+    { name: 'Pediatrics', value: 45, color: '#ff9800' },
+    { name: 'Emergency', value: 67, color: '#f44336' },
+  ];
+
+  const weeklyData = [
+    { day: 'Mon', appointments: 24 },
+    { day: 'Tue', appointments: 31 },
+    { day: 'Wed', appointments: 28 },
+    { day: 'Thu', appointments: 35 },
+    { day: 'Fri', appointments: 42 },
+    { day: 'Sat', appointments: 19 },
+    { day: 'Sun', appointments: 8 },
+  ];
+
+  const statusData = [
+    { name: 'Scheduled', value: 45, color: '#1976d2' },
+    { name: 'Completed', value: 32, color: '#4caf50' },
+    { name: 'In Progress', value: 8, color: '#ff9800' },
+    { name: 'Cancelled', value: 15, color: '#f44336' },
+  ];
 
   useEffect(() => {
     fetchDashboardData();
@@ -45,8 +76,9 @@ const Dashboard = () => {
       const scheduled = appointmentsData.filter((app: Appointment) => app.status === 'SCHEDULED').length;
       const completed = appointmentsData.filter((app: Appointment) => app.status === 'COMPLETED').length;
       const cancelled = appointmentsData.filter((app: Appointment) => app.status === 'CANCELLED').length;
+      const inProgress = appointmentsData.filter((app: Appointment) => app.status === 'IN_PROGRESS').length;
       
-      setStats({ total, scheduled, completed, cancelled });
+      setStats({ total, scheduled, completed, cancelled, inProgress });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       toast({
@@ -77,14 +109,25 @@ const Dashboard = () => {
   const getRoleSpecificGreeting = () => {
     switch (user?.role) {
       case 'ADMIN':
-        return 'Welcome to the Admin Dashboard';
+        return 'Admin Dashboard Overview';
       case 'DOCTOR':
-        return 'Welcome Dr. ' + user.lastName;
+        return `Welcome Dr. ${user.lastName}`;
       case 'HELPDESK':
-        return 'Welcome to the Help Desk';
+        return 'Help Desk Dashboard';
       default:
-        return 'Welcome to the Hospital Management System';
+        return 'Hospital Management Dashboard';
     }
+  };
+
+  const chartConfig = {
+    appointments: {
+      label: "Appointments",
+      color: "#1976d2",
+    },
+    value: {
+      label: "Value",
+      color: "#4caf50",
+    },
   };
 
   if (isLoading) {
@@ -113,10 +156,18 @@ const Dashboard = () => {
             })}
           </p>
         </div>
+        <div className="flex gap-3">
+          <Button onClick={() => navigate('/appointments')}>
+            View All Appointments
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/calendar')}>
+            Calendar View
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Appointments</CardTitle>
@@ -136,6 +187,17 @@ const Dashboard = () => {
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">{stats.scheduled}</div>
             <p className="text-xs text-muted-foreground">Upcoming appointments</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
+            <span className="text-2xl">🔄</span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{stats.inProgress}</div>
+            <p className="text-xs text-muted-foreground">Currently active</p>
           </CardContent>
         </Card>
 
@@ -162,11 +224,99 @@ const Dashboard = () => {
         </Card>
       </div>
 
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Weekly Appointments</CardTitle>
+            <CardDescription>Appointment distribution by day</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="h-60">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weeklyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="day" />
+                  <YAxis />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="appointments" fill="var(--color-appointments)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>By Department</CardTitle>
+            <CardDescription>Appointments by department</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="h-60">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={departmentData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={60}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {departmentData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Status Overview</CardTitle>
+            <CardDescription>Current appointment statuses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="h-60">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={60}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {statusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Recent Appointments */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Appointments</CardTitle>
-          <CardDescription>Latest appointments in the system</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Recent Appointments</CardTitle>
+              <CardDescription>Latest appointments in the system</CardDescription>
+            </div>
+            <Button variant="outline" onClick={() => navigate('/appointments')}>
+              View All
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -203,6 +353,41 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Quick Actions for Admin */}
+      {user?.role === 'ADMIN' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/users')}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span>👤</span>
+                User Management
+              </CardTitle>
+              <CardDescription>Manage system users and permissions</CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/departments')}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span>🏥</span>
+                Departments
+              </CardTitle>
+              <CardDescription>Manage hospital departments</CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/reports')}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span>📊</span>
+                Reports & Analytics
+              </CardTitle>
+              <CardDescription>View detailed reports and analytics</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

@@ -81,6 +81,21 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   }
 };
 
+// Helper function to map backend roles to frontend roles
+const mapBackendRoleToFrontendRole = (backendRole: string): 'ADMIN' | 'DOCTOR' | 'HELPDESK' => {
+  switch (backendRole) {
+    case 'ROLE_ADMIN':
+      return 'ADMIN';
+    case 'ROLE_DOCTOR':
+      return 'DOCTOR';
+    case 'ROLE_HELPDESK':
+      return 'HELPDESK';
+    default:
+      console.warn(`Unknown role: ${backendRole}, defaulting to HELPDESK`);
+      return 'HELPDESK';
+  }
+};
+
 interface AuthContextType {
   state: AuthState;
   login: (username: string, password: string) => Promise<void>;
@@ -130,14 +145,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       const data = await response.json();
+      console.log('Backend login response:', data);
       
-      // Store token and user data
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      // Map backend response to frontend format
+      const frontendRole = mapBackendRoleToFrontendRole(data.roles[0]);
+      
+      // Create user object with proper format
+      const user: User = {
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        role: frontendRole,
+        firstName: data.firstName || data.username, // Fallback if firstName not provided
+        lastName: data.lastName || '', // Fallback if lastName not provided
+      };
+
+      console.log('Mapped user object:', user);
+      console.log('User role after mapping:', user.role);
+      
+      // Store token (map accessToken to token) and user data
+      localStorage.setItem('token', data.accessToken);
+      localStorage.setItem('user', JSON.stringify(user));
       
       dispatch({
         type: 'AUTH_SUCCESS',
-        payload: { user: data.user, token: data.token },
+        payload: { user, token: data.accessToken },
       });
     } catch (error) {
       console.error('Login error:', error);

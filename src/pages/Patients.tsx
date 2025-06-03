@@ -8,19 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import NewPatientDialog from '@/components/patients/NewPatientDialog';
+import { usersAPI } from '@/services/api';
 
 interface Patient {
   id: number;
-  firstName: string;
-  lastName: string;
+  fullName: string;
   email: string;
-  phone: string;
-  dateOfBirth: string;
-  address: string;
-  emergencyContact: string;
-  medicalHistory: string;
-  insuranceInfo: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  phoneNumber: string;
+  active: boolean;
 }
 
 const Patients = () => {
@@ -44,36 +39,8 @@ const Patients = () => {
   const fetchPatients = async () => {
     try {
       setIsLoading(true);
-      // Mock data for now - replace with actual API call
-      const mockPatients: Patient[] = [
-        {
-          id: 1,
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john.doe@email.com',
-          phone: '+1-555-0123',
-          dateOfBirth: '1985-06-15',
-          address: '123 Main St, City, State 12345',
-          emergencyContact: 'Jane Doe - +1-555-0124',
-          medicalHistory: 'Hypertension, Diabetes Type 2',
-          insuranceInfo: 'Blue Cross Blue Shield - Policy #BC123456',
-          status: 'ACTIVE'
-        },
-        {
-          id: 2,
-          firstName: 'Mary',
-          lastName: 'Smith',
-          email: 'mary.smith@email.com',
-          phone: '+1-555-0125',
-          dateOfBirth: '1990-03-22',
-          address: '456 Oak Ave, City, State 12345',
-          emergencyContact: 'Robert Smith - +1-555-0126',
-          medicalHistory: 'Asthma, Allergies (Penicillin)',
-          insuranceInfo: 'Aetna - Policy #AE789012',
-          status: 'ACTIVE'
-        }
-      ];
-      setPatients(mockPatients);
+      const data = await usersAPI.getPatients();
+      setPatients(data);
     } catch (error) {
       console.error('Error fetching patients:', error);
       toast({
@@ -90,10 +57,9 @@ const Patients = () => {
     let filtered = patients;
     if (searchTerm) {
       filtered = filtered.filter(patient =>
-        patient.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        patient.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        patient.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         patient.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        patient.phone.includes(searchTerm)
+        patient.phoneNumber.includes(searchTerm)
       );
     }
     setFilteredPatients(filtered);
@@ -158,21 +124,17 @@ const Patients = () => {
                     <div className="flex-1">
                       <div className="flex items-center space-x-4">
                         <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white font-semibold">
-                          {patient.firstName[0]}{patient.lastName[0]}
+                          {patient.fullName.split(' ').map(n => n[0]).join('')}
                         </div>
                         <div>
-                          <p className="font-medium text-lg">{patient.firstName} {patient.lastName}</p>
-                          <p className="text-sm text-gray-600">{patient.email} • {patient.phone}</p>
-                          <p className="text-sm text-gray-500">DOB: {patient.dateOfBirth}</p>
-                          {patient.medicalHistory && (
-                            <p className="text-sm text-gray-500 mt-1">Medical History: {patient.medicalHistory}</p>
-                          )}
+                          <p className="font-medium text-lg">{patient.fullName}</p>
+                          <p className="text-sm text-gray-600">{patient.email} • {patient.phoneNumber}</p>
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">
-                      <Badge variant={patient.status === 'ACTIVE' ? 'default' : 'destructive'}>
-                        {patient.status}
+                      <Badge variant={patient.active ? 'default' : 'destructive'}>
+                        {patient.active ? 'ACTIVE' : 'INACTIVE'}
                       </Badge>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline">

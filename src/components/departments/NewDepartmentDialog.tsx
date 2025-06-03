@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { departmentsAPI } from '@/services/api';
 
 interface NewDepartmentDialogProps {
   open: boolean;
@@ -23,10 +24,6 @@ const NewDepartmentDialog: React.FC<NewDepartmentDialogProps> = ({
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    headOfDepartment: '',
-    location: '',
-    phone: '',
-    email: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,8 +31,7 @@ const NewDepartmentDialog: React.FC<NewDepartmentDialogProps> = ({
     setIsLoading(true);
 
     try {
-      // Mock API call - replace with actual API
-      console.log('Creating department:', formData);
+      await departmentsAPI.create(formData);
       
       toast({
         title: "Success",
@@ -47,10 +43,6 @@ const NewDepartmentDialog: React.FC<NewDepartmentDialogProps> = ({
       setFormData({
         name: '',
         description: '',
-        headOfDepartment: '',
-        location: '',
-        phone: '',
-        email: '',
       });
     } catch (error) {
       console.error('Error creating department:', error);
@@ -96,51 +88,6 @@ const NewDepartmentDialog: React.FC<NewDepartmentDialogProps> = ({
               value={formData.description}
               onChange={(e) => handleInputChange('description', e.target.value)}
               rows={3}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="headOfDepartment">Head of Department</Label>
-            <Input
-              id="headOfDepartment"
-              value={formData.headOfDepartment}
-              onChange={(e) => handleInputChange('headOfDepartment', e.target.value)}
-              placeholder="Dr. John Doe"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="location">Location</Label>
-            <Input
-              id="location"
-              value={formData.location}
-              onChange={(e) => handleInputChange('location', e.target.value)}
-              placeholder="Building A, Floor 2"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
-            <Input
-              id="phone"
-              value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
-              placeholder="+1-555-0100"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              placeholder="department@hospital.com"
               required
             />
           </div>

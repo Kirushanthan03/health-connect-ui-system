@@ -100,7 +100,7 @@ export const appointmentsAPI = {
   // Get appointments by department
   getByDepartment: (departmentId: number) => apiCall(`/appointments/department/${departmentId}`),
   
-  // Update appointment status - Fixed endpoint path
+  // Update appointment status
   updateStatus: (id: number, status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW') =>
     apiCall(`/appointments/${id}/status/${status}`, {
       method: 'PUT',
@@ -119,19 +119,47 @@ export const appointmentsAPI = {
   }),
 };
 
-// Patients API
+// Patients API - Updated to use users/patients endpoint
 export const patientsAPI = {
   getAll: (search?: string, page?: number, size?: number) => {
-    const params = new URLSearchParams();
-    if (search) params.append('search', search);
-    if (page !== undefined) params.append('page', page.toString());
-    if (size !== undefined) params.append('size', size.toString());
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return apiCall(`/patients${query}`);
+    // Since patients are managed through users API, we use the users/patients endpoint
+    return apiCall('/users/patients').then(data => {
+      // Transform to match expected format for backward compatibility
+      let filtered = data;
+      if (search) {
+        filtered = data.filter((patient: any) => 
+          patient.fullName.toLowerCase().includes(search.toLowerCase()) ||
+          patient.email.toLowerCase().includes(search.toLowerCase()) ||
+          patient.phoneNumber.includes(search)
+        );
+      }
+      
+      // Apply pagination if specified
+      if (page !== undefined && size !== undefined) {
+        const start = page * size;
+        const end = start + size;
+        filtered = filtered.slice(start, end);
+      }
+      
+      // Transform to match expected response format
+      return {
+        content: filtered.map((patient: any) => ({
+          id: patient.id,
+          name: patient.fullName,
+          email: patient.email,
+          phone: patient.phoneNumber,
+          dateOfBirth: patient.dateOfBirth || '',
+        })),
+        totalElements: data.length,
+        totalPages: Math.ceil(data.length / (size || 20)),
+        size: size || 20,
+        number: page || 0
+      };
+    });
   },
 };
 
-// Lookup API - Fixed to handle different response formats
+// Lookup API
 export const lookupAPI = {
   getNames: (entityType: 'patients' | 'doctors' | 'departments', ids: number[]) => {
     const idsParam = ids.join(',');
@@ -145,7 +173,7 @@ export const lookupAPI = {
   },
 };
 
-// Departments API
+// Departments API - Updated to match actual backend endpoints
 export const departmentsAPI = {
   getAll: () => apiCall('/departments'),
   getById: (id: number) => apiCall(`/departments/${id}`),
@@ -163,13 +191,15 @@ export const departmentsAPI = {
     apiCall(`/departments/${id}`, {
       method: 'DELETE',
     }),
+  getDoctorsByDepartment: (id: number) => apiCall(`/departments/${id}/doctors`),
 };
 
-// Users API - Updated to match backend endpoints
+// Users API - Updated to match actual backend endpoints
 export const usersAPI = {
   getAll: () => apiCall('/users'),
   getById: (id: number) => apiCall(`/users/${id}`),
   getDoctors: () => apiCall('/users/doctors'),
+  getPatients: () => apiCall('/users/patients'),
   getHelpdesk: () => apiCall('/users/helpdesk'),
   getProfile: () => apiCall('/users/profile'),
   update: (id: number, user: any) =>
@@ -183,7 +213,7 @@ export const usersAPI = {
     }),
 };
 
-// Utility functions for date/time handling - Updated to match backend format
+// Utility functions for date/time handling
 export const dateUtils = {
   // Convert frontend date/time to backend format (YYYY-MM-DD HH:MM)
   toBackendFormat: (date: string, time: string): string => {

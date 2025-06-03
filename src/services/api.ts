@@ -100,7 +100,7 @@ export const appointmentsAPI = {
   // Get appointments by department
   getByDepartment: (departmentId: number) => apiCall(`/appointments/department/${departmentId}`),
   
-  // Update appointment status
+  // Update appointment status - Fixed endpoint path
   updateStatus: (id: number, status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW') =>
     apiCall(`/appointments/${id}/status/${status}`, {
       method: 'PUT',
@@ -131,11 +131,17 @@ export const patientsAPI = {
   },
 };
 
-// Lookup API
+// Lookup API - Fixed to handle different response formats
 export const lookupAPI = {
   getNames: (entityType: 'patients' | 'doctors' | 'departments', ids: number[]) => {
     const idsParam = ids.join(',');
-    return apiCall(`/lookup/${entityType}?ids=${idsParam}`);
+    return apiCall(`/lookup/${entityType}?ids=${idsParam}`).then(data => {
+      // Handle different response formats from backend
+      return data.map((item: any) => ({
+        id: item.id,
+        name: item.name || item.fullName || `${entityType.slice(0, -1)} ${item.id}`
+      }));
+    });
   },
 };
 
@@ -159,10 +165,13 @@ export const departmentsAPI = {
     }),
 };
 
-// Users API
+// Users API - Updated to match backend endpoints
 export const usersAPI = {
   getAll: () => apiCall('/users'),
   getById: (id: number) => apiCall(`/users/${id}`),
+  getDoctors: () => apiCall('/users/doctors'),
+  getHelpdesk: () => apiCall('/users/helpdesk'),
+  getProfile: () => apiCall('/users/profile'),
   update: (id: number, user: any) =>
     apiCall(`/users/${id}`, {
       method: 'PUT',
@@ -174,11 +183,16 @@ export const usersAPI = {
     }),
 };
 
-// Utility functions for date/time handling
+// Utility functions for date/time handling - Updated to match backend format
 export const dateUtils = {
   // Convert frontend date/time to backend format (YYYY-MM-DD HH:MM)
   toBackendFormat: (date: string, time: string): string => {
     return `${date} ${time}`;
+  },
+  
+  // Convert to ISO format for reschedule endpoint
+  toISOFormat: (date: string, time: string): string => {
+    return `${date}T${time}:00`;
   },
   
   // Parse backend datetime format to frontend format

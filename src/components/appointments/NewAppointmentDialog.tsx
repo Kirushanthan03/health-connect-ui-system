@@ -27,8 +27,7 @@ interface Department {
 
 interface Doctor {
   id: number;
-  firstName: string;
-  lastName: string;
+  fullName: string;
   email: string;
 }
 
@@ -81,9 +80,9 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
 
   const fetchDoctors = async () => {
     try {
-      const data = await usersAPI.getAll();
-      const doctorUsers = data.filter((user: any) => user.role === 'DOCTOR');
-      setDoctors(doctorUsers);
+      // Use the dedicated doctors endpoint
+      const data = await usersAPI.getDoctors();
+      setDoctors(data);
     } catch (error) {
       console.error('Error fetching doctors:', error);
     }
@@ -263,7 +262,7 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
               <SelectContent>
                 {doctors.map((doctor) => (
                   <SelectItem key={doctor.id} value={doctor.id.toString()}>
-                    Dr. {doctor.firstName} {doctor.lastName}
+                    {doctor.fullName}
                   </SelectItem>
                 ))}
               </SelectContent>

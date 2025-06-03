@@ -6,6 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { appointmentsAPI, dateUtils } from '@/services/api';
@@ -42,6 +48,9 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   const [status, setStatus] = useState<string>('');
   const [cancelReason, setCancelReason] = useState('');
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showRescheduleDialog, setShowRescheduleDialog] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState<Date | undefined>(undefined);
+  const [rescheduleTime, setRescheduleTime] = useState('');
   const { toast } = useToast();
   const { state } = useAuth();
   const { user } = state;
@@ -51,6 +60,8 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
       setNotes(appointment.notes || '');
       setStatus(appointment.status);
       setCancelReason('');
+      setRescheduleDate(undefined);
+      setRescheduleTime('');
     }
   }, [appointment]);
 
@@ -175,6 +186,46 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
     }
   };
 
+  const handleRescheduleAppointment = async () => {
+    if (!rescheduleDate || !rescheduleTime) {
+      toast({
+        title: "Error",
+        description: "Please select both date and time for rescheduling",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Use ISO format for reschedule endpoint
+      const newDateTime = dateUtils.toISOFormat(
+        format(rescheduleDate, 'yyyy-MM-dd'),
+        rescheduleTime
+      );
+      
+      await appointmentsAPI.reschedule(appointment.id, newDateTime);
+      
+      toast({
+        title: "Success",
+        description: "Appointment rescheduled successfully",
+      });
+      
+      onAppointmentUpdated();
+      onOpenChange(false);
+      setShowRescheduleDialog(false);
+    } catch (error) {
+      console.error('Error rescheduling appointment:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to reschedule appointment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const { date: displayDate, time: displayTime } = dateUtils.parseDateTime(appointment.appointmentDateTime);
 
   return (
@@ -278,14 +329,24 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
             <div className="flex flex-1 gap-2">
               {['SCHEDULED', 'CONFIRMED'].includes(appointment.status) && canUpdateStatus() && (
-                <Button 
-                  variant="destructive" 
-                  onClick={() => setShowCancelDialog(true)}
-                  disabled={isLoading}
-                  className="flex-1 sm:flex-none"
-                >
-                  Cancel Appointment
-                </Button>
+                <>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowRescheduleDialog(true)}
+                    disabled={isLoading}
+                    className="flex-1 sm:flex-none"
+                  >
+                    Reschedule
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => setShowCancelDialog(true)}
+                    disabled={isLoading}
+                    className="flex-1 sm:flex-none"
+                  >
+                    Cancel
+                  </Button>
+                </>
               )}
             </div>
             
@@ -305,7 +366,7 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
                   disabled={isLoading}
                   className="flex-1 sm:flex-none"
                 >
-                  {isLoading ? 'Updating...' : 'Update Appointment'}
+                  {isLoading ? 'Updating...' : 'Update'}
                 </Button>
               )}
             </div>
@@ -346,6 +407,71 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
               disabled={isLoading || !cancelReason.trim()}
             >
               {isLoading ? 'Cancelling...' : 'Cancel Appointment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reschedule Dialog */}
+      <Dialog open={showRescheduleDialog} onOpenChange={setShowRescheduleDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reschedule Appointment</DialogTitle>
+            <DialogDescription>
+              Select a new date and time for this appointment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>New Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !rescheduleDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {rescheduleDate ? format(rescheduleDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={rescheduleDate}
+                      onSelect={setRescheduleDate}
+                      disabled={(date) => date < new Date()}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rescheduleTime">New Time</Label>
+                <Input
+                  id="rescheduleTime"
+                  type="time"
+                  value={rescheduleTime}
+                  onChange={(e) => setRescheduleTime(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRescheduleDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleRescheduleAppointment}
+              disabled={isLoading || !rescheduleDate || !rescheduleTime}
+            >
+              {isLoading ? 'Rescheduling...' : 'Reschedule'}
             </Button>
           </DialogFooter>
         </DialogContent>

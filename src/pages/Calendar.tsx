@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog';
 import AppointmentDetailDialog from '@/components/appointments/AppointmentDetailDialog';
+import { Appointment } from '@/types/appointment';
 
 interface CalendarAppointment {
   id: number;
@@ -25,11 +26,11 @@ const Calendar = () => {
   const { user } = state;
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
   const [showNewAppointmentDialog, setShowNewAppointmentDialog] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<CalendarAppointment | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
 
   useEffect(() => {
@@ -40,46 +41,58 @@ const Calendar = () => {
     try {
       setIsLoading(true);
       // Mock data - replace with actual API call
-      const mockAppointments: CalendarAppointment[] = [
+      const mockAppointments: Appointment[] = [
         {
           id: 1,
-          patientName: 'John Doe',
-          doctorName: 'Dr. Sarah Johnson',
-          department: 'Cardiology',
-          time: '09:00',
+          patientId: 100,
+          doctorId: 200,
+          departmentId: 10,
+          appointmentDateTime: `${date.toISOString().split('T')[0]} 09:00`,
           status: 'SCHEDULED',
           notes: 'Regular checkup',
-          date: date.toISOString().split('T')[0]
+          createdAt: new Date().toISOString(),
+          patientName: 'John Doe',
+          doctorName: 'Dr. Sarah Johnson',
+          department: 'Cardiology'
         },
         {
           id: 2,
-          patientName: 'Mary Smith',
-          doctorName: 'Dr. Michael Chen',
-          department: 'Neurology',
-          time: '10:30',
+          patientId: 101,
+          doctorId: 201,
+          departmentId: 11,
+          appointmentDateTime: `${date.toISOString().split('T')[0]} 10:30`,
           status: 'IN_PROGRESS',
           notes: 'Follow-up consultation',
-          date: date.toISOString().split('T')[0]
+          createdAt: new Date().toISOString(),
+          patientName: 'Mary Smith',
+          doctorName: 'Dr. Michael Chen',
+          department: 'Neurology'
         },
         {
           id: 3,
-          patientName: 'Robert Johnson',
-          doctorName: 'Dr. Emily Rodriguez',
-          department: 'Pediatrics',
-          time: '14:00',
+          patientId: 102,
+          doctorId: 202,
+          departmentId: 12,
+          appointmentDateTime: `${date.toISOString().split('T')[0]} 14:00`,
           status: 'SCHEDULED',
           notes: 'Vaccination appointment',
-          date: date.toISOString().split('T')[0]
+          createdAt: new Date().toISOString(),
+          patientName: 'Robert Johnson',
+          doctorName: 'Dr. Emily Rodriguez',
+          department: 'Pediatrics'
         },
         {
           id: 4,
-          patientName: 'Lisa Wilson',
-          doctorName: 'Dr. Robert Kim',
-          department: 'Emergency',
-          time: '16:15',
+          patientId: 103,
+          doctorId: 203,
+          departmentId: 13,
+          appointmentDateTime: `${date.toISOString().split('T')[0]} 16:15`,
           status: 'COMPLETED',
           notes: 'Emergency consultation',
-          date: date.toISOString().split('T')[0]
+          createdAt: new Date().toISOString(),
+          patientName: 'Lisa Wilson',
+          doctorName: 'Dr. Robert Kim',
+          department: 'Emergency'
         }
       ];
       
@@ -119,10 +132,13 @@ const Calendar = () => {
   ];
 
   const getAppointmentForTimeSlot = (time: string) => {
-    return appointments.find(apt => apt.time === time);
+    return appointments.find(apt => {
+      const [, appointmentTime] = apt.appointmentDateTime.split(' ');
+      return appointmentTime === time;
+    });
   };
 
-  const handleAppointmentClick = (appointment: CalendarAppointment) => {
+  const handleAppointmentClick = (appointment: Appointment) => {
     setSelectedAppointment(appointment);
     setShowDetailDialog(true);
   };
@@ -257,9 +273,10 @@ const Calendar = () => {
               <React.Fragment key={time}>
                 <div className="text-xs text-gray-500 py-2">{time}</div>
                 {weekDates.map((date, dateIndex) => {
-                  const dayAppointments = appointments.filter(apt => 
-                    apt.date === date.toISOString().split('T')[0] && apt.time === time
-                  );
+                  const dayAppointments = appointments.filter(apt => {
+                    const [appointmentDate, appointmentTime] = apt.appointmentDateTime.split(' ');
+                    return appointmentDate === date.toISOString().split('T')[0] && appointmentTime === time;
+                  });
                   return (
                     <div key={dateIndex} className="min-h-[40px] border rounded p-1">
                       {dayAppointments.map(apt => (
@@ -284,11 +301,6 @@ const Calendar = () => {
 
   const renderMonthView = () => {
     const monthDates = getMonthDates(selectedDate);
-    const weeks = [];
-    
-    for (let i = 0; i < monthDates.length; i += 7) {
-      weeks.push(monthDates.slice(i, i + 7));
-    }
 
     return (
       <Card className="lg:col-span-3">
@@ -307,9 +319,10 @@ const Calendar = () => {
             ))}
             
             {monthDates.map((date, index) => {
-              const dayAppointments = appointments.filter(apt => 
-                apt.date === date.toISOString().split('T')[0]
-              );
+              const dayAppointments = appointments.filter(apt => {
+                const [appointmentDate] = apt.appointmentDateTime.split(' ');
+                return appointmentDate === date.toISOString().split('T')[0];
+              });
               
               return (
                 <div 
@@ -436,7 +449,6 @@ const Calendar = () => {
           {renderCurrentView()}
         </div>
 
-        {/* Today's Summary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

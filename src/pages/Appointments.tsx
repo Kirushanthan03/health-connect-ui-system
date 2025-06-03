@@ -1,34 +1,15 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { appointmentsAPI, dateUtils } from '@/services/api';
+import { appointmentsAPI, lookupAPI, dateUtils } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog';
 import AppointmentDetailDialog from '@/components/appointments/AppointmentDetailDialog';
-
-interface Appointment {
-  id: number;
-  patientId: number;
-  doctorId: number;
-  departmentId: number;
-  createdById?: number;
-  appointmentDateTime: string; // ISO format
-  status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW';
-  notes?: string;
-  cancellationReason?: string;
-  createdAt: string;
-  updatedAt?: string;
-  
-  // These will be populated by frontend - in real app you'd join this data
-  patientName: string;
-  doctorName: string;
-  department: string;
-}
+import { Appointment } from '@/types/appointment';
 
 const Appointments = () => {
   const { state } = useAuth();
@@ -56,14 +37,29 @@ const Appointments = () => {
       setIsLoading(true);
       const data = await appointmentsAPI.getAll();
       
-      // Transform backend data to include display names
-      // In a real application, you'd either join this data in the backend
-      // or make separate API calls to get patient/doctor/department names
+      // Get unique IDs for lookup
+      const patientIds = [...new Set(data.map((apt: any) => apt.patientId))];
+      const doctorIds = [...new Set(data.map((apt: any) => apt.doctorId))];
+      const departmentIds = [...new Set(data.map((apt: any) => apt.departmentId))];
+      
+      // Fetch names for all entities
+      const [patientNames, doctorNames, departmentNames] = await Promise.all([
+        lookupAPI.getNames('patients', patientIds),
+        lookupAPI.getNames('doctors', doctorIds),
+        lookupAPI.getNames('departments', departmentIds)
+      ]);
+      
+      // Create lookup maps
+      const patientMap = new Map(patientNames.map((p: any) => [p.id, p.name]));
+      const doctorMap = new Map(doctorNames.map((d: any) => [d.id, d.name]));
+      const departmentMap = new Map(departmentNames.map((dept: any) => [dept.id, dept.name]));
+      
+      // Transform data with display names
       const transformedData = data.map((apt: any) => ({
         ...apt,
-        patientName: `Patient ${apt.patientId}`, // TODO: Replace with actual patient name lookup
-        doctorName: `Doctor ${apt.doctorId}`, // TODO: Replace with actual doctor name lookup
-        department: `Department ${apt.departmentId}`, // TODO: Replace with actual department name lookup
+        patientName: patientMap.get(apt.patientId) || `Patient ${apt.patientId}`,
+        doctorName: doctorMap.get(apt.doctorId) || `Doctor ${apt.doctorId}`,
+        department: departmentMap.get(apt.departmentId) || `Department ${apt.departmentId}`,
       }));
       
       setAppointments(transformedData);

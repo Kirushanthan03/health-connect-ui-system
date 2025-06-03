@@ -48,7 +48,7 @@ export const authAPI = {
     }),
 };
 
-// Appointments API - Updated to match backend specification
+// Appointments API
 export const appointmentsAPI = {
   // Get all appointments
   getAll: () => apiCall('/appointments'),
@@ -58,10 +58,11 @@ export const appointmentsAPI = {
   
   // Create new appointment
   create: (appointment: {
-    patientId: number;
+    patientId?: number;
+    patientName?: string;
     doctorId: number;
     departmentId: number;
-    appointmentDateTime: string; // ISO format
+    appointmentDateTime: string; // Format: YYYY-MM-DD HH:MM
     createdById?: number;
     notes?: string;
   }) => apiCall('/appointments', {
@@ -118,6 +119,26 @@ export const appointmentsAPI = {
   }),
 };
 
+// Patients API
+export const patientsAPI = {
+  getAll: (search?: string, page?: number, size?: number) => {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (page !== undefined) params.append('page', page.toString());
+    if (size !== undefined) params.append('size', size.toString());
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return apiCall(`/patients${query}`);
+  },
+};
+
+// Lookup API
+export const lookupAPI = {
+  getNames: (entityType: 'patients' | 'doctors' | 'departments', ids: number[]) => {
+    const idsParam = ids.join(',');
+    return apiCall(`/lookup/${entityType}?ids=${idsParam}`);
+  },
+};
+
 // Departments API
 export const departmentsAPI = {
   getAll: () => apiCall('/departments'),
@@ -155,27 +176,29 @@ export const usersAPI = {
 
 // Utility functions for date/time handling
 export const dateUtils = {
-  // Convert frontend date/time to ISO format for backend
-  toISOString: (date: string, time: string): string => {
-    return `${date}T${time}:00`;
+  // Convert frontend date/time to backend format (YYYY-MM-DD HH:MM)
+  toBackendFormat: (date: string, time: string): string => {
+    return `${date} ${time}`;
   },
   
   // Parse backend datetime format to frontend format
   parseDateTime: (appointmentDateTime: string) => {
-    const date = new Date(appointmentDateTime);
+    const [date, time] = appointmentDateTime.split(' ');
     return {
-      date: date.toISOString().split('T')[0],
-      time: date.toTimeString().slice(0, 5)
+      date: date,
+      time: time
     };
   },
   
   // Format display date from backend
   formatDisplayDate: (appointmentDateTime: string): string => {
-    return new Date(appointmentDateTime).toLocaleDateString();
+    const [date] = appointmentDateTime.split(' ');
+    return new Date(date).toLocaleDateString();
   },
   
   // Format display time from backend
   formatDisplayTime: (appointmentDateTime: string): string => {
-    return new Date(appointmentDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const [, time] = appointmentDateTime.split(' ');
+    return time;
   }
 };

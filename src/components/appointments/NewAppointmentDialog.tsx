@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { appointmentsAPI, departmentsAPI, usersAPI } from '@/services/api';
+import { appointmentsAPI, departmentsAPI, usersAPI, patientsAPI, dateUtils } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface NewAppointmentDialogProps {
@@ -32,12 +32,22 @@ interface Doctor {
   email: string;
 }
 
+interface Patient {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+}
+
 const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
   open,
   onOpenChange,
   onAppointmentCreated
 }) => {
   const [formData, setFormData] = useState({
+    patientType: 'existing', // 'existing' or 'new'
+    patientId: '',
     patientName: '',
     doctorId: '',
     departmentId: '',
@@ -47,6 +57,8 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
   });
   const [departments, setDepartments] = useState<Department[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patientSearch, setPatientSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -54,6 +66,7 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
     if (open) {
       fetchDepartments();
       fetchDoctors();
+      fetchPatients();
     }
   }, [open]);
 
@@ -76,24 +89,47 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
     }
   };
 
+  const fetchPatients = async (search?: string) => {
+    try {
+      const data = await patientsAPI.getAll(search, 0, 50);
+      setPatients(data.content || []);
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+    }
+  };
+
+  const handlePatientSearch = (searchTerm: string) => {
+    setPatientSearch(searchTerm);
+    if (searchTerm.length > 2) {
+      fetchPatients(searchTerm);
+    } else {
+      fetchPatients();
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.date) return;
 
     setIsLoading(true);
     try {
-      const selectedDoctor = doctors.find(d => d.id.toString() === formData.doctorId);
-      const selectedDepartment = departments.find(d => d.id.toString() === formData.departmentId);
+      const appointmentDateTime = dateUtils.toBackendFormat(
+        format(formData.date, 'yyyy-MM-dd'),
+        formData.time
+      );
 
-      const appointmentData = {
-        patientName: formData.patientName,
-        doctorName: selectedDoctor ? `${selectedDoctor.firstName} ${selectedDoctor.lastName}` : '',
-        department: selectedDepartment?.name || '',
-        date: format(formData.date, 'yyyy-MM-dd'),
-        time: formData.time,
-        status: 'SCHEDULED',
+      const appointmentData: any = {
+        doctorId: parseInt(formData.doctorId),
+        departmentId: parseInt(formData.departmentId),
+        appointmentDateTime,
         notes: formData.notes
       };
+
+      if (formData.patientType === 'existing') {
+        appointmentData.patientId = parseInt(formData.patientId);
+      } else {
+        appointmentData.patientName = formData.patientName;
+      }
 
       await appointmentsAPI.create(appointmentData);
       toast({
@@ -102,6 +138,8 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
       });
       
       setFormData({
+        patientType: 'existing',
+        patientId: '',
         patientName: '',
         doctorId: '',
         departmentId: '',
@@ -109,6 +147,7 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
         time: '',
         notes: ''
       });
+      setPatientSearch('');
       
       onAppointmentCreated();
       onOpenChange(false);
@@ -135,15 +174,63 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="patientName">Patient Name</Label>
-            <Input
-              id="patientName"
-              placeholder="Enter patient name"
-              value={formData.patientName}
-              onChange={(e) => setFormData(prev => ({ ...prev, patientName: e.target.value }))}
-              required
-            />
+            <Label>Patient</Label>
+            <Select 
+              value={formData.patientType} 
+              onValueChange={(value) => setFormData(prev => ({ 
+                ...prev, 
+                patientType: value,
+                patientId: '',
+                patientName: ''
+              }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select patient type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="existing">Existing Patient</SelectItem>
+                <SelectItem value="new">New Patient</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          {formData.patientType === 'existing' ? (
+            <div className="space-y-2">
+              <Label htmlFor="patientSearch">Search Patient</Label>
+              <Input
+                id="patientSearch"
+                placeholder="Type to search patients..."
+                value={patientSearch}
+                onChange={(e) => handlePatientSearch(e.target.value)}
+              />
+              <Select 
+                value={formData.patientId} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, patientId: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select patient" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((patient) => (
+                    <SelectItem key={patient.id} value={patient.id.toString()}>
+                      {patient.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="patientName">New Patient Name</Label>
+              <Input
+                id="patientName"
+                placeholder="Enter patient full name"
+                value={formData.patientName}
+                onChange={(e) => setFormData(prev => ({ ...prev, patientName: e.target.value }))}
+                required
+              />
+            </div>
+          )}
           
           <div className="space-y-2">
             <Label htmlFor="department">Department</Label>

@@ -44,10 +44,13 @@ const Appointments = () => {
       setIsLoading(true);
       const data = await appointmentsAPI.getAll();
       
-      // Get unique IDs for lookup - properly type as numbers
-      const patientIds = [...new Set(data.map((apt: any) => Number(apt.patientId)))].filter(id => !isNaN(id));
-      const doctorIds = [...new Set(data.map((apt: any) => Number(apt.doctorId)))].filter(id => !isNaN(id));
-      const departmentIds = [...new Set(data.map((apt: any) => Number(apt.departmentId)))].filter(id => !isNaN(id));
+      // Get unique IDs for lookup - properly type as numbers with explicit type assertion
+      const patientIds: number[] = [...new Set(data.map((apt: any) => Number(apt.patientId)))]
+        .filter((id): id is number => !isNaN(id));
+      const doctorIds: number[] = [...new Set(data.map((apt: any) => Number(apt.doctorId)))]
+        .filter((id): id is number => !isNaN(id));
+      const departmentIds: number[] = [...new Set(data.map((apt: any) => Number(apt.departmentId)))]
+        .filter((id): id is number => !isNaN(id));
       
       // Fetch names for all entities
       const [patientNames, doctorNames, departmentNames] = await Promise.all([

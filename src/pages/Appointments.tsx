@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { appointmentsAPI } from '@/services/api';
+import { appointmentsAPI, dateUtils } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog';
@@ -13,13 +13,21 @@ import AppointmentDetailDialog from '@/components/appointments/AppointmentDetail
 
 interface Appointment {
   id: number;
+  patientId: number;
+  doctorId: number;
+  departmentId: number;
+  createdById?: number;
+  appointmentDateTime: string; // ISO format
+  status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW';
+  notes?: string;
+  cancellationReason?: string;
+  createdAt: string;
+  updatedAt?: string;
+  
+  // These will be populated by frontend - in real app you'd join this data
   patientName: string;
   doctorName: string;
   department: string;
-  date: string;
-  time: string;
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-  notes?: string;
 }
 
 const Appointments = () => {
@@ -47,12 +55,23 @@ const Appointments = () => {
     try {
       setIsLoading(true);
       const data = await appointmentsAPI.getAll();
-      setAppointments(data);
+      
+      // Transform backend data to include display names
+      // In a real application, you'd either join this data in the backend
+      // or make separate API calls to get patient/doctor/department names
+      const transformedData = data.map((apt: any) => ({
+        ...apt,
+        patientName: `Patient ${apt.patientId}`, // TODO: Replace with actual patient name lookup
+        doctorName: `Doctor ${apt.doctorId}`, // TODO: Replace with actual doctor name lookup
+        department: `Department ${apt.departmentId}`, // TODO: Replace with actual department name lookup
+      }));
+      
+      setAppointments(transformedData);
     } catch (error) {
       console.error('Error fetching appointments:', error);
       toast({
         title: "Error",
-        description: "Failed to load appointments",
+        description: error instanceof Error ? error.message : "Failed to load appointments",
         variant: "destructive",
       });
     } finally {
@@ -82,7 +101,7 @@ const Appointments = () => {
 
   const handleStatusUpdate = async (appointmentId: number, newStatus: string) => {
     try {
-      await appointmentsAPI.updateStatus(appointmentId, newStatus);
+      await appointmentsAPI.updateStatus(appointmentId, newStatus as any);
       toast({
         title: "Success",
         description: "Appointment status updated successfully",
@@ -92,7 +111,7 @@ const Appointments = () => {
       console.error('Error updating appointment status:', error);
       toast({
         title: "Error",
-        description: "Failed to update appointment status",
+        description: error instanceof Error ? error.message : "Failed to update appointment status",
         variant: "destructive",
       });
     }
@@ -106,13 +125,17 @@ const Appointments = () => {
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'SCHEDULED':
+      case 'CONFIRMED':
         return 'default';
       case 'IN_PROGRESS':
         return 'secondary';
       case 'COMPLETED':
         return 'outline';
       case 'CANCELLED':
+      case 'NO_SHOW':
         return 'destructive';
+      case 'RESCHEDULED':
+        return 'secondary';
       default:
         return 'default';
     }
@@ -121,7 +144,7 @@ const Appointments = () => {
   const canUpdateStatus = (status: string) => {
     if (user?.role === 'ADMIN') return true;
     if (user?.role === 'DOCTOR') {
-      return ['SCHEDULED', 'IN_PROGRESS'].includes(status);
+      return ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'].includes(status);
     }
     if (user?.role === 'HELPDESK') {
       return ['SCHEDULED'].includes(status);
@@ -145,6 +168,8 @@ const Appointments = () => {
       </Layout>
     );
   }
+
+  const allStatuses = ['ALL', 'SCHEDULED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'RESCHEDULED', 'NO_SHOW'];
 
   return (
     <Layout>
@@ -177,8 +202,8 @@ const Appointments = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <div className="flex gap-2">
-                {['ALL', 'SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].map((status) => (
+              <div className="flex gap-2 flex-wrap">
+                {allStatuses.map((status) => (
                   <Button
                     key={status}
                     variant={statusFilter === status ? 'default' : 'outline'}
@@ -214,18 +239,21 @@ const Appointments = () => {
                         <div>
                           <p className="font-medium text-lg">{appointment.patientName}</p>
                           <p className="text-sm text-gray-600">
-                            Dr. {appointment.doctorName} • {appointment.department}
+                            {appointment.doctorName} • {appointment.department}
                           </p>
                           {appointment.notes && (
                             <p className="text-sm text-gray-500 mt-1">{appointment.notes}</p>
+                          )}
+                          {appointment.cancellationReason && (
+                            <p className="text-sm text-red-500 mt-1">Reason: {appointment.cancellationReason}</p>
                           )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">
                       <div className="text-right">
-                        <p className="text-sm font-medium">{appointment.date}</p>
-                        <p className="text-sm text-gray-600">{appointment.time}</p>
+                        <p className="text-sm font-medium">{dateUtils.formatDisplayDate(appointment.appointmentDateTime)}</p>
+                        <p className="text-sm text-gray-600">{dateUtils.formatDisplayTime(appointment.appointmentDateTime)}</p>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Badge variant={getStatusBadgeVariant(appointment.status)}>
@@ -238,6 +266,24 @@ const Appointments = () => {
                                 <Button
                                   size="sm"
                                   variant="outline"
+                                  onClick={() => handleStatusUpdate(appointment.id, 'CONFIRMED')}
+                                >
+                                  Confirm
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleStatusUpdate(appointment.id, 'IN_PROGRESS')}
+                                >
+                                  Start
+                                </Button>
+                              </>
+                            )}
+                            {appointment.status === 'CONFIRMED' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
                                   onClick={() => handleStatusUpdate(appointment.id, 'IN_PROGRESS')}
                                 >
                                   Start
@@ -245,9 +291,9 @@ const Appointments = () => {
                                 <Button
                                   size="sm"
                                   variant="destructive"
-                                  onClick={() => handleStatusUpdate(appointment.id, 'CANCELLED')}
+                                  onClick={() => handleStatusUpdate(appointment.id, 'NO_SHOW')}
                                 >
-                                  Cancel
+                                  No Show
                                 </Button>
                               </>
                             )}

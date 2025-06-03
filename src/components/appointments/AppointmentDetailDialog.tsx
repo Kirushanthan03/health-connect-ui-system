@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,16 +8,20 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { appointmentsAPI, dateUtils } from '@/services/api';
 
 interface Appointment {
   id: number;
+  patientId?: number;
+  doctorId?: number;
+  departmentId?: number;
   patientName: string;
   doctorName: string;
   department: string;
-  time: string;
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  appointmentDateTime: string; // ISO format
+  status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW';
   notes?: string;
-  date: string;
+  cancellationReason?: string;
 }
 
 interface AppointmentDetailDialogProps {
@@ -35,6 +40,8 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<string>('');
+  const [cancelReason, setCancelReason] = useState('');
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
   const { toast } = useToast();
   const { state } = useAuth();
   const { user } = state;
@@ -43,6 +50,7 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
     if (appointment) {
       setNotes(appointment.notes || '');
       setStatus(appointment.status);
+      setCancelReason('');
     }
   }, [appointment]);
 
@@ -51,13 +59,17 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'SCHEDULED':
+      case 'CONFIRMED':
         return 'default';
       case 'IN_PROGRESS':
         return 'secondary';
       case 'COMPLETED':
         return 'outline';
       case 'CANCELLED':
+      case 'NO_SHOW':
         return 'destructive';
+      case 'RESCHEDULED':
+        return 'secondary';
       default:
         return 'default';
     }
@@ -66,7 +78,7 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   const canUpdateStatus = () => {
     if (user?.role === 'ADMIN') return true;
     if (user?.role === 'DOCTOR') {
-      return ['SCHEDULED', 'IN_PROGRESS'].includes(appointment.status);
+      return ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'].includes(appointment.status);
     }
     if (user?.role === 'HELPDESK') {
       return ['SCHEDULED'].includes(appointment.status);
@@ -75,12 +87,17 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   };
 
   const getAvailableStatuses = () => {
+    const allStatuses = ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'RESCHEDULED', 'NO_SHOW'];
+    
     if (user?.role === 'ADMIN') {
-      return ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+      return allStatuses;
     }
     if (user?.role === 'DOCTOR') {
       if (appointment.status === 'SCHEDULED') {
-        return ['SCHEDULED', 'IN_PROGRESS', 'CANCELLED'];
+        return ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS', 'NO_SHOW'];
+      }
+      if (appointment.status === 'CONFIRMED') {
+        return ['CONFIRMED', 'IN_PROGRESS', 'NO_SHOW'];
       }
       if (appointment.status === 'IN_PROGRESS') {
         return ['IN_PROGRESS', 'COMPLETED'];
@@ -88,7 +105,7 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
     }
     if (user?.role === 'HELPDESK') {
       if (appointment.status === 'SCHEDULED') {
-        return ['SCHEDULED', 'CANCELLED'];
+        return ['SCHEDULED', 'CONFIRMED'];
       }
     }
     return [appointment.status];
@@ -97,8 +114,13 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   const handleUpdateAppointment = async () => {
     setIsLoading(true);
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (status !== appointment.status) {
+        await appointmentsAPI.updateStatus(appointment.id, status as any);
+      }
+      
+      if (notes !== (appointment.notes || '')) {
+        await appointmentsAPI.update(appointment.id, { notes });
+      }
       
       toast({
         title: "Success",
@@ -111,7 +133,7 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
       console.error('Error updating appointment:', error);
       toast({
         title: "Error",
-        description: "Failed to update appointment",
+        description: error instanceof Error ? error.message : "Failed to update appointment",
         variant: "destructive",
       });
     } finally {
@@ -120,10 +142,18 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   };
 
   const handleCancelAppointment = async () => {
+    if (!cancelReason.trim()) {
+      toast({
+        title: "Error",
+        description: "Please provide a reason for cancellation",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await appointmentsAPI.cancel(appointment.id, cancelReason);
       
       toast({
         title: "Success",
@@ -132,11 +162,12 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
       
       onAppointmentUpdated();
       onOpenChange(false);
+      setShowCancelDialog(false);
     } catch (error) {
       console.error('Error cancelling appointment:', error);
       toast({
         title: "Error",
-        description: "Failed to cancel appointment",
+        description: error instanceof Error ? error.message : "Failed to cancel appointment",
         variant: "destructive",
       });
     } finally {
@@ -144,132 +175,182 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
     }
   };
 
+  const { date: displayDate, time: displayTime } = dateUtils.parseDateTime(appointment.appointmentDateTime);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle>Appointment Details</DialogTitle>
-          <DialogDescription>
-            View and manage appointment information
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-6">
-          {/* Patient Information */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Patient Name</Label>
-              <p className="text-lg font-semibold">{appointment.patientName}</p>
-            </div>
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Status</Label>
-              <div className="mt-1">
-                <Badge variant={getStatusBadgeVariant(appointment.status)} className="text-sm">
-                  {appointment.status}
-                </Badge>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Appointment Details</DialogTitle>
+            <DialogDescription>
+              View and manage appointment information
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Patient Information */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Patient Name</Label>
+                <p className="text-lg font-semibold">{appointment.patientName}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Status</Label>
+                <div className="mt-1">
+                  <Badge variant={getStatusBadgeVariant(appointment.status)} className="text-sm">
+                    {appointment.status}
+                  </Badge>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Doctor and Department */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Doctor</Label>
-              <p className="text-base">{appointment.doctorName}</p>
+            {/* Doctor and Department */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Doctor</Label>
+                <p className="text-base">{appointment.doctorName}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Department</Label>
+                <p className="text-base">{appointment.department}</p>
+              </div>
             </div>
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Department</Label>
-              <p className="text-base">{appointment.department}</p>
-            </div>
-          </div>
 
-          {/* Date and Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Date</Label>
-              <p className="text-base">{new Date(appointment.date).toLocaleDateString()}</p>
+            {/* Date and Time */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Date</Label>
+                <p className="text-base">{dateUtils.formatDisplayDate(appointment.appointmentDateTime)}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Time</Label>
+                <p className="text-base">{dateUtils.formatDisplayTime(appointment.appointmentDateTime)}</p>
+              </div>
             </div>
-            <div>
-              <Label className="text-sm font-medium text-gray-700">Time</Label>
-              <p className="text-base">{appointment.time}</p>
-            </div>
-          </div>
 
-          {/* Status Update (if user can update) */}
-          {canUpdateStatus() && (
+            {/* Cancellation Reason (if cancelled) */}
+            {appointment.cancellationReason && (
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Cancellation Reason</Label>
+                <p className="text-base text-red-600">{appointment.cancellationReason}</p>
+              </div>
+            )}
+
+            {/* Status Update (if user can update) */}
+            {canUpdateStatus() && (
+              <div>
+                <Label htmlFor="status" className="text-sm font-medium text-gray-700">
+                  Update Status
+                </Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableStatuses().map((statusOption) => (
+                      <SelectItem key={statusOption} value={statusOption}>
+                        {statusOption}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Notes */}
             <div>
-              <Label htmlFor="status" className="text-sm font-medium text-gray-700">
-                Update Status
+              <Label htmlFor="notes" className="text-sm font-medium text-gray-700">
+                Notes
               </Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableStatuses().map((statusOption) => (
-                    <SelectItem key={statusOption} value={statusOption}>
-                      {statusOption}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Textarea
+                id="notes"
+                placeholder="Add notes about this appointment..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={4}
+                className="mt-1"
+                disabled={!canUpdateStatus()}
+              />
             </div>
-          )}
-
-          {/* Notes */}
-          <div>
-            <Label htmlFor="notes" className="text-sm font-medium text-gray-700">
-              Notes
-            </Label>
-            <Textarea
-              id="notes"
-              placeholder="Add notes about this appointment..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
-              className="mt-1"
-              disabled={!canUpdateStatus()}
-            />
           </div>
-        </div>
 
-        <DialogFooter className="flex flex-col sm:flex-row gap-2">
-          <div className="flex flex-1 gap-2">
-            {appointment.status === 'SCHEDULED' && canUpdateStatus() && (
-              <Button 
-                variant="destructive" 
-                onClick={handleCancelAppointment}
-                disabled={isLoading}
-                className="flex-1 sm:flex-none"
-              >
-                {isLoading ? 'Cancelling...' : 'Cancel Appointment'}
-              </Button>
-            )}
-          </div>
-          
-          <div className="flex gap-2">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => onOpenChange(false)}
-              className="flex-1 sm:flex-none"
-            >
-              Close
-            </Button>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-1 gap-2">
+              {['SCHEDULED', 'CONFIRMED'].includes(appointment.status) && canUpdateStatus() && (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => setShowCancelDialog(true)}
+                  disabled={isLoading}
+                  className="flex-1 sm:flex-none"
+                >
+                  Cancel Appointment
+                </Button>
+              )}
+            </div>
             
-            {canUpdateStatus() && (status !== appointment.status || notes !== (appointment.notes || '')) && (
+            <div className="flex gap-2">
               <Button 
-                onClick={handleUpdateAppointment} 
-                disabled={isLoading}
+                type="button" 
+                variant="outline" 
+                onClick={() => onOpenChange(false)}
                 className="flex-1 sm:flex-none"
               >
-                {isLoading ? 'Updating...' : 'Update Appointment'}
+                Close
               </Button>
-            )}
+              
+              {canUpdateStatus() && (status !== appointment.status || notes !== (appointment.notes || '')) && (
+                <Button 
+                  onClick={handleUpdateAppointment} 
+                  disabled={isLoading}
+                  className="flex-1 sm:flex-none"
+                >
+                  {isLoading ? 'Updating...' : 'Update Appointment'}
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Appointment</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for cancelling this appointment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="cancelReason">Reason for Cancellation</Label>
+              <Textarea
+                id="cancelReason"
+                placeholder="Please specify the reason for cancellation..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                rows={3}
+                className="mt-1"
+                required
+              />
+            </div>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
+              Back
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleCancelAppointment}
+              disabled={isLoading || !cancelReason.trim()}
+            >
+              {isLoading ? 'Cancelling...' : 'Cancel Appointment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

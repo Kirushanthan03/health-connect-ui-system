@@ -20,7 +20,8 @@ export interface Appointment {
 }
 
 export interface CreateAppointmentRequest {
-  patientId: number;
+  patientId?: number;
+  patientName?: string;
   doctorId: number;
   departmentId: number;
   appointmentDateTime: string; // ISO format

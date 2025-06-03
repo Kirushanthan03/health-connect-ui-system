@@ -11,17 +11,24 @@ import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog
 import AppointmentDetailDialog from '@/components/appointments/AppointmentDetailDialog';
 import { Appointment } from '@/types/appointment';
 
+// Define the extended appointment interface for display
+interface ExtendedAppointment extends Appointment {
+  patientName: string;
+  doctorName: string;
+  department: string;
+}
+
 const Appointments = () => {
   const { state } = useAuth();
   const { user } = state;
   const { toast } = useToast();
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([]);
+  const [appointments, setAppointments] = useState<ExtendedAppointment[]>([]);
+  const [filteredAppointments, setFilteredAppointments] = useState<ExtendedAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showNewAppointmentDialog, setShowNewAppointmentDialog] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<ExtendedAppointment | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
 
   useEffect(() => {
@@ -37,10 +44,10 @@ const Appointments = () => {
       setIsLoading(true);
       const data = await appointmentsAPI.getAll();
       
-      // Get unique IDs for lookup
-      const patientIds = [...new Set(data.map((apt: any) => apt.patientId))];
-      const doctorIds = [...new Set(data.map((apt: any) => apt.doctorId))];
-      const departmentIds = [...new Set(data.map((apt: any) => apt.departmentId))];
+      // Get unique IDs for lookup - properly type as numbers
+      const patientIds = [...new Set(data.map((apt: any) => Number(apt.patientId)))].filter(id => !isNaN(id));
+      const doctorIds = [...new Set(data.map((apt: any) => Number(apt.doctorId)))].filter(id => !isNaN(id));
+      const departmentIds = [...new Set(data.map((apt: any) => Number(apt.departmentId)))].filter(id => !isNaN(id));
       
       // Fetch names for all entities
       const [patientNames, doctorNames, departmentNames] = await Promise.all([
@@ -55,7 +62,7 @@ const Appointments = () => {
       const departmentMap = new Map(departmentNames.map((dept: any) => [dept.id, dept.name]));
       
       // Transform data with display names
-      const transformedData = data.map((apt: any) => ({
+      const transformedData: ExtendedAppointment[] = data.map((apt: any) => ({
         ...apt,
         patientName: patientMap.get(apt.patientId) || `Patient ${apt.patientId}`,
         doctorName: doctorMap.get(apt.doctorId) || `Doctor ${apt.doctorId}`,
@@ -113,7 +120,7 @@ const Appointments = () => {
     }
   };
 
-  const handleAppointmentClick = (appointment: Appointment) => {
+  const handleAppointmentClick = (appointment: ExtendedAppointment) => {
     setSelectedAppointment(appointment);
     setShowDetailDialog(true);
   };

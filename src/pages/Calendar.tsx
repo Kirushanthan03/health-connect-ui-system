@@ -10,6 +10,13 @@ import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog
 import AppointmentDetailDialog from '@/components/appointments/AppointmentDetailDialog';
 import { Appointment } from '@/types/appointment';
 
+// Define the extended appointment interface for display
+interface ExtendedAppointment extends Appointment {
+  patientName: string;
+  doctorName: string;
+  department: string;
+}
+
 interface CalendarAppointment {
   id: number;
   patientName: string;
@@ -26,11 +33,11 @@ const Calendar = () => {
   const { user } = state;
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointments, setAppointments] = useState<ExtendedAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
   const [showNewAppointmentDialog, setShowNewAppointmentDialog] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<ExtendedAppointment | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
 
   useEffect(() => {
@@ -41,7 +48,7 @@ const Calendar = () => {
     try {
       setIsLoading(true);
       // Mock data - replace with actual API call
-      const mockAppointments: Appointment[] = [
+      const mockAppointments: ExtendedAppointment[] = [
         {
           id: 1,
           patientId: 100,
@@ -138,7 +145,7 @@ const Calendar = () => {
     });
   };
 
-  const handleAppointmentClick = (appointment: Appointment) => {
+  const handleAppointmentClick = (appointment: ExtendedAppointment) => {
     setSelectedAppointment(appointment);
     setShowDetailDialog(true);
   };

@@ -159,21 +159,47 @@ export const patientsAPI = {
   },
 };
 
-// Lookup API
+// Lookup API - Updated to use actual backend endpoints
 export const lookupAPI = {
-  getNames: (entityType: 'patients' | 'doctors' | 'departments', ids: number[]) => {
-    const idsParam = ids.join(',');
-    return apiCall(`/lookup/${entityType}?ids=${idsParam}`).then(data => {
-      // Handle different response formats from backend
-      return data.map((item: any) => ({
-        id: item.id,
-        name: item.name || item.fullName || `${entityType.slice(0, -1)} ${item.id}`
-      }));
-    });
+  getNames: async (entityType: 'patients' | 'doctors' | 'departments', ids: number[]) => {
+    try {
+      if (entityType === 'patients') {
+        // Get all patients and filter by IDs
+        const patients = await apiCall('/users/patients');
+        return patients
+          .filter((patient: any) => ids.includes(patient.id))
+          .map((patient: any) => ({
+            id: patient.id,
+            name: patient.fullName
+          }));
+      } else if (entityType === 'doctors') {
+        // Get all doctors and filter by IDs
+        const doctors = await apiCall('/users/doctors');
+        return doctors
+          .filter((doctor: any) => ids.includes(doctor.id))
+          .map((doctor: any) => ({
+            id: doctor.id,
+            name: doctor.fullName
+          }));
+      } else if (entityType === 'departments') {
+        // Get all departments and filter by IDs
+        const departments = await apiCall('/departments');
+        return departments
+          .filter((department: any) => ids.includes(department.id))
+          .map((department: any) => ({
+            id: department.id,
+            name: department.name
+          }));
+      }
+      return [];
+    } catch (error) {
+      console.error(`Error fetching ${entityType} names:`, error);
+      return [];
+    }
   },
 };
 
-// Departments API - Updated to match actual backend endpoints
+// Departments API
 export const departmentsAPI = {
   getAll: () => apiCall('/departments'),
   getById: (id: number) => apiCall(`/departments/${id}`),
@@ -194,7 +220,7 @@ export const departmentsAPI = {
   getDoctorsByDepartment: (id: number) => apiCall(`/departments/${id}/doctors`),
 };
 
-// Users API - Updated to match actual backend endpoints
+// Users API
 export const usersAPI = {
   getAll: () => apiCall('/users'),
   getById: (id: number) => apiCall(`/users/${id}`),

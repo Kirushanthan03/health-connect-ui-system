@@ -123,7 +123,7 @@ export const appointmentsAPI = {
 export const patientsAPI = {
   getAll: (search?: string, page?: number, size?: number) => {
     // Since patients are managed through users API, we use the users/patients endpoint
-    return apiCall('/users/patients').then(data => {
+    return apiCall('/api/patients').then(data => {
       // Transform to match expected format for backward compatibility
       let filtered = data;
       if (search) {
@@ -176,20 +176,19 @@ export const patientsAPI = {
     
     // Prepare the data in the format expected by the backend
     const userData = {
-      fullName: `${patientData.firstName} ${patientData.lastName}`,
-      email: patientData.email,
-      phoneNumber: patientData.phone,
-      dateOfBirth: patientData.dateOfBirth,
-      // Add any additional fields needed by the backend
-      address: patientData.address,
-      emergencyContact: patientData.emergencyContact,
-      medicalHistory: patientData.medicalHistory,
-      insuranceInfo: patientData.insuranceInfo,
-      role: 'PATIENT' // Assuming this is how roles are specified
-    };
+  firstName: patientData.firstName,
+  lastName: patientData.lastName,
+  email: patientData.email,
+  phone: patientData.phone,
+  dateOfBirth: patientData.dateOfBirth,
+  address: patientData.address,
+  emergencyContact: patientData.emergencyContact,
+  medicalHistory: patientData.medicalHistory,
+  insuranceInfo: patientData.insuranceInfo
+};
     
     // This is a placeholder. Replace with the actual endpoint when confirmed
-    return apiCall('/auth/signup', {
+    return apiCall('/patients', {
       method: 'POST',
       body: JSON.stringify(userData)
     });
@@ -202,7 +201,7 @@ export const lookupAPI = {
     try {
       if (entityType === 'patients') {
         // Get all patients and filter by IDs
-        const patients = await apiCall('/users/patients');
+        const patients = await apiCall('/patients');
         return patients
           .filter((patient: any) => ids.includes(patient.id))
           .map((patient: any) => ({
@@ -262,7 +261,7 @@ export const usersAPI = {
   getAll: () => apiCall('/users'),
   getById: (id: number) => apiCall(`/users/${id}`),
   getDoctors: () => apiCall('/users/doctors'),
-  getPatients: () => apiCall('/users/patients'),
+  getPatients: () => apiCall('/patients'),
   getHelpdesk: () => apiCall('/users/helpdesk'),
   getProfile: () => apiCall('/users/profile'),
   update: (id: number, user: any) =>

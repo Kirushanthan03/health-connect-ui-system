@@ -157,9 +157,46 @@ export const patientsAPI = {
       };
     });
   },
+  
+  // Add patient creation functionality - this would make a request to create a patient
+  create: (patientData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    dateOfBirth: string;
+    address?: string;
+    emergencyContact?: string;
+    medicalHistory?: string;
+    insuranceInfo?: string;
+  }) => {
+    // Based on the API structure, we assume patient creation happens through the user creation endpoint
+    // or a special patient creation endpoint. Since it's not explicitly shown in the controllers,
+    // we'll implement a placeholder that can be updated once the exact endpoint is confirmed
+    
+    // Prepare the data in the format expected by the backend
+    const userData = {
+      fullName: `${patientData.firstName} ${patientData.lastName}`,
+      email: patientData.email,
+      phoneNumber: patientData.phone,
+      dateOfBirth: patientData.dateOfBirth,
+      // Add any additional fields needed by the backend
+      address: patientData.address,
+      emergencyContact: patientData.emergencyContact,
+      medicalHistory: patientData.medicalHistory,
+      insuranceInfo: patientData.insuranceInfo,
+      role: 'PATIENT' // Assuming this is how roles are specified
+    };
+    
+    // This is a placeholder. Replace with the actual endpoint when confirmed
+    return apiCall('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(userData)
+    });
+  }
 };
 
-// Lookup API - Updated to use actual backend endpoints
+// Lookup API - Using direct endpoints for lookups
 export const lookupAPI = {
   getNames: async (entityType: 'patients' | 'doctors' | 'departments', ids: number[]) => {
     try {

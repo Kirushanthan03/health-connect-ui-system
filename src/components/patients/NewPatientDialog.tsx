@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { patientsAPI } from '@/services/api';
 
 interface NewPatientDialogProps {
   open: boolean;
@@ -37,8 +38,8 @@ const NewPatientDialog: React.FC<NewPatientDialogProps> = ({
     setIsLoading(true);
 
     try {
-      // Mock API call - replace with actual API
-      console.log('Creating patient:', formData);
+      // Call the patient creation API
+      await patientsAPI.create(formData);
       
       toast({
         title: "Success",

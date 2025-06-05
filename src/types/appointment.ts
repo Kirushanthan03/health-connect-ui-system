@@ -9,6 +9,7 @@ export interface Appointment {
   notes?: string;
   createdAt: string;
   updatedAt?: string;
+  createdById: number;
 
   // These fields might be populated by frontend joins or separate API calls
   patientName?: string;
@@ -22,6 +23,7 @@ export interface CreateAppointmentRequest {
   appointmentDate: string; // ISO format
   reason: string;
   notes?: string;
+  createdById: number;
 }
 
 export interface UpdateAppointmentRequest {

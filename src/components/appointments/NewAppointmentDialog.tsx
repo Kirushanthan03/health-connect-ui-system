@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { appointmentsAPI, departmentsAPI, usersAPI, patientsAPI, dateUtils } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface NewAppointmentDialogProps {
   open: boolean;
@@ -44,10 +45,12 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
   onOpenChange,
   onAppointmentCreated
 }) => {
+  const { state } = useAuth();
+  const { user } = state;
   const [formData, setFormData] = useState({
     patientId: '',
     doctorId: '',
-    appointmentDate: undefined as Date | undefined,
+    appointmentDateTime: undefined as Date | undefined,
     time: '',
     reason: '',
     notes: ''
@@ -106,21 +109,22 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.appointmentDate) return;
+    if (!formData.appointmentDateTime) return;
 
     setIsLoading(true);
     try {
       const appointmentDateTime = dateUtils.toBackendFormat(
-        format(formData.appointmentDate, 'yyyy-MM-dd'),
+        format(formData.appointmentDateTime, 'yyyy-MM-dd'),
         formData.time
       );
 
       const appointmentData = {
         patientId: parseInt(formData.patientId),
         doctorId: parseInt(formData.doctorId),
-        appointmentDate: appointmentDateTime,
+        appointmentDateTime: appointmentDateTime,
         reason: formData.reason,
-        notes: formData.notes
+        notes: formData.notes,
+        createdById: user?.id
       };
 
       await appointmentsAPI.create(appointmentData);
@@ -132,7 +136,7 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
       setFormData({
         patientId: '',
         doctorId: '',
-        appointmentDate: undefined,
+        appointmentDateTime: undefined,
         time: '',
         reason: '',
         notes: ''
@@ -209,18 +213,18 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
                     variant="outline"
                     className={cn(
                       "w-full justify-start text-left font-normal",
-                      !formData.appointmentDate && "text-muted-foreground"
+                      !formData.appointmentDateTime && "text-muted-foreground"
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.appointmentDate ? format(formData.appointmentDate, "PPP") : <span>Pick a date</span>}
+                    {formData.appointmentDateTime ? format(formData.appointmentDateTime, "PPP") : <span>Pick a date</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={formData.appointmentDate}
-                    onSelect={(date) => setFormData(prev => ({ ...prev, appointmentDate: date }))}
+                    selected={formData.appointmentDateTime}
+                    onSelect={(date) => setFormData(prev => ({ ...prev, appointmentDateTime: date }))}
                     disabled={(date) => date < new Date()}
                     initialFocus
                     className="pointer-events-auto"

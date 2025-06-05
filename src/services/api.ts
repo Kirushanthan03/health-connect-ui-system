@@ -1,21 +1,72 @@
 const API_BASE_URL = 'http://localhost:8080/api';
 
-// Token handling functions
+// JWT Token handling
+interface DecodedToken {
+  sub: string;
+  exp: number;
+  roles: string[];
+  username: string;
+  email: string;
+}
+
+interface TokenData {
+  token: string;
+  type: string;
+  userId: number;
+}
+
 const getToken = () => {
   const tokenData = localStorage.getItem('token');
   if (!tokenData) return null;
 
   try {
     const { token, type } = JSON.parse(tokenData);
+    if (!token || !type) {
+      localStorage.removeItem('token');
+      return null;
+    }
     return `${type} ${token}`;
   } catch (error) {
-    console.error('Error parsing token:', error);
+    localStorage.removeItem('token');
     return null;
   }
 };
 
-const setToken = (tokenData: { token: string; type: string }) => {
-  localStorage.setItem('token', JSON.stringify(tokenData));
+const isTokenValid = (token: string): boolean => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c =>
+      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+    ).join(''));
+
+    const decoded: DecodedToken = JSON.parse(jsonPayload);
+    return decoded.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+};
+
+const getDecodedToken = (): DecodedToken | null => {
+  const tokenData = localStorage.getItem('token');
+  if (!tokenData) return null;
+
+  try {
+    const { token } = JSON.parse(tokenData);
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c =>
+      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+    ).join(''));
+
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
+const setToken = (data: TokenData) => {
+  localStorage.setItem('token', JSON.stringify(data));
 };
 
 const removeToken = () => {
@@ -25,29 +76,48 @@ const removeToken = () => {
 // Generic API call function
 const apiCall = async (endpoint: string, options: RequestInit = {}) => {
   const token = getToken();
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
+
+  if (!isTokenValid(token.split(' ')[1])) {
+    removeToken();
+    throw new Error('Token expired');
+  }
 
   const config: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: token }),
+      Authorization: token,
       ...options.headers,
     },
     ...options,
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `API Error: ${response.status}`);
+    if (response.status === 401) {
+      removeToken();
+      throw new Error('Session expired');
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `API Error: ${response.status}`);
+    }
+
+    if (response.status === 204) {
+      return null;
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Session expired') {
+      throw error;
+    }
+    throw new Error('Network error occurred');
   }
-
-  // Handle 204 No Content responses
-  if (response.status === 204) {
-    return null;
-  }
-
-  return response.json();
 };
 
 // Authentication API
@@ -65,26 +135,76 @@ export const authAPI = {
     }
 
     const data = await response.json();
-    // Store token data
     setToken({
       token: data.token,
-      type: data.type
+      type: data.type,
+      userId: data.id
     });
 
-    return data;
+    return {
+      id: data.id,
+      username: data.username,
+      email: data.email,
+      roles: data.roles
+    };
   },
 
-  signup: (userData: any) =>
-    apiCall('/auth/signup', {
+  signup: async (userData: {
+    username: string;
+    email: string;
+    password: string;
+    fullName: string;
+    phoneNumber?: string;
+    roles: string[];
+    departmentId?: number;
+  }) => {
+    // Convert roles array to the format expected by the backend
+    const signupData = {
+      ...userData,
+      roles: userData.roles
+    };
+
+    const response = await fetch(`${API_BASE_URL}/auth/signup`, {
       method: 'POST',
-      body: JSON.stringify(userData),
-    }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(signupData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Signup failed: ${response.status}`);
+    }
+
+    return response.json();
+  },
 
   signout: () => {
     removeToken();
   },
 
-  getCurrentUser: () => apiCall('/auth/me'),
+  getCurrentUser: () => {
+    const tokenData = localStorage.getItem('token');
+    if (!tokenData) {
+      throw new Error('No valid token found');
+    }
+
+    try {
+      const { userId } = JSON.parse(tokenData);
+      const decoded = getDecodedToken();
+      if (!decoded) {
+        throw new Error('Invalid token');
+      }
+
+      return {
+        id: userId,
+        username: decoded.username,
+        email: decoded.email,
+        roles: decoded.roles
+      };
+    } catch (error) {
+      throw new Error('Failed to get current user');
+    }
+  }
 };
 
 // Appointments API
@@ -99,7 +219,7 @@ export const appointmentsAPI = {
   create: (appointment: {
     patientId: number;
     doctorId: number;
-    appointmentDate: string; // Format: yyyy-MM-dd'T'HH:mm:ss
+    appointmentDateTime: string; // Format: yyyy-MM-dd'T'HH:mm:ss
     reason: string;
     notes?: string;
   }) => apiCall('/appointments', {
@@ -320,20 +440,44 @@ export const departmentsAPI = {
 // Users API
 export const usersAPI = {
   getAll: () => apiCall('/users'),
+
   getById: (id: number) => apiCall(`/users/${id}`),
+
+  create: (userData: {
+    username: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    department?: string;
+  }) => apiCall('/users', {
+    method: 'POST',
+    body: JSON.stringify(userData),
+  }),
+
+  update: (id: number, userData: {
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    role?: string;
+    department?: string;
+  }) => apiCall(`/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(userData),
+  }),
+
+  delete: (id: number) => apiCall(`/users/${id}`, {
+    method: 'DELETE',
+  }),
+
+  toggleStatus: (id: number) => apiCall(`/users/${id}/toggle-status`, {
+    method: 'PUT',
+  }),
+
   getDoctors: () => apiCall('/users/doctors'),
-  // getPatients: () => apiCall('/patients'),
   getHelpdesk: () => apiCall('/users/helpdesk'),
   getProfile: () => apiCall('/users/profile'),
-  update: (id: number, user: any) =>
-    apiCall(`/users/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(user),
-    }),
-  delete: (id: number) =>
-    apiCall(`/users/${id}`, {
-      method: 'DELETE',
-    }),
 };
 
 // Utility functions for date/time handling

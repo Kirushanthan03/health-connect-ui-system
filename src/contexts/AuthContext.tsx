@@ -109,8 +109,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkAuth = async () => {
       try {
         const user = await authAPI.getCurrentUser();
-        dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+        if (user) {
+          dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+        } else {
+          dispatch({ type: 'LOGIN_FAILURE' });
+        }
       } catch (error) {
+        console.error('Auth check failed:', error);
         dispatch({ type: 'LOGIN_FAILURE' });
       }
     };
@@ -124,14 +129,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await authAPI.signin({ username, password });
       dispatch({ type: 'LOGIN_SUCCESS', payload: response });
     } catch (error) {
+      console.error('Login failed:', error);
       dispatch({ type: 'LOGIN_FAILURE' });
       throw error;
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
     }
   };
 
   const logout = () => {
-    authAPI.signout();
-    dispatch({ type: 'LOGOUT' });
+    try {
+      authAPI.signout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      dispatch({ type: 'LOGOUT' });
+    }
   };
 
   return (

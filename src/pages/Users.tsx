@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import NewUserDialog from '@/components/users/NewUserDialog';
+import { usersAPI } from '@/services/api';
+import { useNavigate } from 'react-router-dom';
 
 interface User {
   id: number;
@@ -22,18 +24,23 @@ interface User {
 
 const Users = () => {
   const { state, hasRole } = useAuth();
-  const { user } = state;
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [showNewUserDialog, setShowNewUserDialog] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!hasRole('ADMIN')) {
+      navigate('/dashboard');
+      return;
+    }
     fetchUsers();
-  }, []);
+  }, [hasRole, navigate]);
 
   useEffect(() => {
     filterUsers();
@@ -42,43 +49,12 @@ const Users = () => {
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
-      // Mock data for now - replace with actual API call
-      const mockUsers: User[] = [
-        {
-          id: 1,
-          username: 'admin',
-          email: 'admin@hospital.com',
-          firstName: 'System',
-          lastName: 'Administrator',
-          role: 'ADMIN',
-          isActive: true,
-          createdAt: '2024-01-01T00:00:00Z'
-        },
-        {
-          id: 2,
-          username: 'dr.smith',
-          email: 'john.smith@hospital.com',
-          firstName: 'John',
-          lastName: 'Smith',
-          role: 'DOCTOR',
-          department: 'Cardiology',
-          isActive: true,
-          createdAt: '2024-01-15T00:00:00Z'
-        },
-        {
-          id: 3,
-          username: 'helpdesk1',
-          email: 'sarah.johnson@hospital.com',
-          firstName: 'Sarah',
-          lastName: 'Johnson',
-          role: 'HELPDESK',
-          isActive: true,
-          createdAt: '2024-02-01T00:00:00Z'
-        }
-      ];
-      setUsers(mockUsers);
+      setError(null);
+      const response = await usersAPI.getAll();
+      setUsers(response);
     } catch (error) {
       console.error('Error fetching users:', error);
+      setError('Failed to load users. Please try again.');
       toast({
         title: "Error",
         description: "Failed to load users",
@@ -92,11 +68,12 @@ const Users = () => {
   const filterUsers = () => {
     let filtered = users;
     if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(user =>
-        user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.lastName.toLowerCase().includes(searchTerm.toLowerCase())
+        user.username.toLowerCase().includes(searchLower) ||
+        user.email.toLowerCase().includes(searchLower) ||
+        user.firstName.toLowerCase().includes(searchLower) ||
+        user.lastName.toLowerCase().includes(searchLower)
       );
     }
     if (roleFilter !== 'ALL') {
@@ -107,9 +84,7 @@ const Users = () => {
 
   const handleToggleUserStatus = async (userId: number, currentStatus: boolean) => {
     try {
-      // Mock API call - replace with actual API
-      console.log(`Toggling user ${userId} status to ${!currentStatus}`);
-
+      await usersAPI.toggleStatus(userId);
       setUsers(prev => prev.map(u =>
         u.id === userId ? { ...u, isActive: !currentStatus } : u
       ));
@@ -123,6 +98,47 @@ const Users = () => {
       toast({
         title: "Error",
         description: "Failed to update user status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCreateUser = async (userData: any) => {
+    try {
+      await usersAPI.create(userData);
+      toast({
+        title: "Success",
+        description: "User created successfully",
+      });
+      setShowNewUserDialog(false);
+      fetchUsers();
+    } catch (error) {
+      console.error('Error creating user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create user",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    if (!window.confirm('Are you sure you want to delete this user?')) {
+      return;
+    }
+
+    try {
+      await usersAPI.delete(userId);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      toast({
+        title: "Success",
+        description: "User deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete user",
         variant: "destructive",
       });
     }
@@ -167,6 +183,22 @@ const Users = () => {
     );
   }
 
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
+            <p className="text-gray-600">{error}</p>
+            <Button onClick={fetchUsers} className="mt-4">
+              Retry
+            </Button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="p-6 space-y-6">
@@ -180,7 +212,7 @@ const Users = () => {
           </Button>
         </div>
 
-        <Card>
+        {/* <Card>
           <CardHeader>
             <CardTitle>Filter Users</CardTitle>
             <CardDescription>Search and filter users by various criteria</CardDescription>
@@ -199,7 +231,6 @@ const Users = () => {
                   <Button
                     key={role}
                     variant={roleFilter === role ? 'default' : 'outline'}
-                    size="sm"
                     onClick={() => setRoleFilter(role)}
                   >
                     {role}
@@ -208,62 +239,67 @@ const Users = () => {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
 
         <Card>
-          <CardHeader>
-            <CardTitle>Users ({filteredUsers.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {filteredUsers.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No users found</p>
-              ) : (
-                filteredUsers.map((userData) => (
-                  <div
-                    key={userData.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white font-semibold">
-                          {userData.firstName[0]}{userData.lastName[0]}
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th> */}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredUsers.map((user) => (
+                    <tr key={user.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{user.username}</div>
+                            <div className="text-sm text-gray-500">{user.email}</div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-lg">{userData.firstName} {userData.lastName}</p>
-                          <p className="text-sm text-gray-600">{userData.email} • @{userData.username}</p>
-                          {userData.department && (
-                            <p className="text-sm text-gray-500">Department: {userData.department}</p>
-                          )}
-                          <p className="text-sm text-gray-500">Created: {new Date(userData.createdAt).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-2">
-                        <Badge variant={getRoleBadgeVariant(userData.role)}>
-                          {userData.role}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={getRoleBadgeVariant(user.role)}>
+                          {user.role}
                         </Badge>
-                        <Badge variant={userData.isActive ? 'default' : 'destructive'}>
-                          {userData.isActive ? 'Active' : 'Inactive'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {user.department || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={user.isActive ? 'default' : 'secondary'}>
+                          {user.isActive ? 'Active' : 'Inactive'}
                         </Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={userData.isActive ? 'destructive' : 'default'}
-                          onClick={() => handleToggleUserStatus(userData.id, userData.isActive)}
-                        >
-                          {userData.isActive ? 'Deactivate' : 'Activate'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        {/* <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleUserStatus(user.id, user.isActive)}
+                          >
+                            {user.isActive ? 'Deactivate' : 'Activate'}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteUser(user.id)}
+                          >
+                            Delete
+                          </Button>
+                        </div> */}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
@@ -271,7 +307,7 @@ const Users = () => {
         <NewUserDialog
           open={showNewUserDialog}
           onOpenChange={setShowNewUserDialog}
-          onUserCreated={fetchUsers}
+          onUserCreated={handleCreateUser}
         />
       </div>
     </Layout>

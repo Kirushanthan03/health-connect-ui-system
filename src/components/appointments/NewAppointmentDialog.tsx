@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +32,8 @@ interface Doctor {
 
 interface Patient {
   id: number;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
   dateOfBirth: string;
@@ -45,13 +45,11 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
   onAppointmentCreated
 }) => {
   const [formData, setFormData] = useState({
-    patientType: 'existing', // 'existing' or 'new'
     patientId: '',
-    patientName: '',
     doctorId: '',
-    departmentId: '',
-    date: undefined as Date | undefined,
+    appointmentDate: undefined as Date | undefined,
     time: '',
+    reason: '',
     notes: ''
   });
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -108,46 +106,38 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.date) return;
+    if (!formData.appointmentDate) return;
 
     setIsLoading(true);
     try {
       const appointmentDateTime = dateUtils.toBackendFormat(
-        format(formData.date, 'yyyy-MM-dd'),
+        format(formData.appointmentDate, 'yyyy-MM-dd'),
         formData.time
       );
 
-      const appointmentData: any = {
+      const appointmentData = {
+        patientId: parseInt(formData.patientId),
         doctorId: parseInt(formData.doctorId),
-        departmentId: parseInt(formData.departmentId),
-        appointmentDateTime,
+        appointmentDate: appointmentDateTime,
+        reason: formData.reason,
         notes: formData.notes
       };
-
-      if (formData.patientType === 'existing') {
-        appointmentData.patientId = parseInt(formData.patientId);
-      } else {
-        appointmentData.patientName = formData.patientName;
-      }
 
       await appointmentsAPI.create(appointmentData);
       toast({
         title: "Success",
         description: "Appointment created successfully",
       });
-      
+
       setFormData({
-        patientType: 'existing',
         patientId: '',
-        patientName: '',
         doctorId: '',
-        departmentId: '',
-        date: undefined,
+        appointmentDate: undefined,
         time: '',
+        reason: '',
         notes: ''
       });
-      setPatientSearch('');
-      
+
       onAppointmentCreated();
       onOpenChange(false);
     } catch (error) {
@@ -174,76 +164,17 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Patient</Label>
-            <Select 
-              value={formData.patientType} 
-              onValueChange={(value) => setFormData(prev => ({ 
-                ...prev, 
-                patientType: value,
-                patientId: '',
-                patientName: ''
-              }))}
+            <Select
+              value={formData.patientId}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, patientId: value }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select patient type" />
+                <SelectValue placeholder="Select patient" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="existing">Existing Patient</SelectItem>
-                <SelectItem value="new">New Patient</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {formData.patientType === 'existing' ? (
-            <div className="space-y-2">
-              <Label htmlFor="patientSearch">Search Patient</Label>
-              <Input
-                id="patientSearch"
-                placeholder="Type to search patients..."
-                value={patientSearch}
-                onChange={(e) => handlePatientSearch(e.target.value)}
-              />
-              <Select 
-                value={formData.patientId} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, patientId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select patient" />
-                </SelectTrigger>
-                <SelectContent>
-                  {patients.map((patient) => (
-                    <SelectItem key={patient.id} value={patient.id.toString()}>
-                      {patient.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="patientName">New Patient Name</Label>
-              <Input
-                id="patientName"
-                placeholder="Enter patient full name"
-                value={formData.patientName}
-                onChange={(e) => setFormData(prev => ({ ...prev, patientName: e.target.value }))}
-                required
-              />
-            </div>
-          )}
-          
-          <div className="space-y-2">
-            <Label htmlFor="department">Department</Label>
-            <Select 
-              value={formData.departmentId} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, departmentId: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select department" />
-              </SelectTrigger>
-              <SelectContent>
-                {departments.map((dept) => (
-                  <SelectItem key={dept.id} value={dept.id.toString()}>
-                    {dept.name}
+                {patients.map((patient) => (
+                  <SelectItem key={patient.id} value={patient.id.toString()}>
+                    {`${patient.firstName} ${patient.lastName}`}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -252,8 +183,8 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
 
           <div className="space-y-2">
             <Label htmlFor="doctor">Doctor</Label>
-            <Select 
-              value={formData.doctorId} 
+            <Select
+              value={formData.doctorId}
               onValueChange={(value) => setFormData(prev => ({ ...prev, doctorId: value }))}
             >
               <SelectTrigger>
@@ -278,18 +209,18 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
                     variant="outline"
                     className={cn(
                       "w-full justify-start text-left font-normal",
-                      !formData.date && "text-muted-foreground"
+                      !formData.appointmentDate && "text-muted-foreground"
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.date ? format(formData.date, "PPP") : <span>Pick a date</span>}
+                    {formData.appointmentDate ? format(formData.appointmentDate, "PPP") : <span>Pick a date</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={formData.date}
-                    onSelect={(date) => setFormData(prev => ({ ...prev, date }))}
+                    selected={formData.appointmentDate}
+                    onSelect={(date) => setFormData(prev => ({ ...prev, appointmentDate: date }))}
                     disabled={(date) => date < new Date()}
                     initialFocus
                     className="pointer-events-auto"
@@ -308,6 +239,17 @@ const NewAppointmentDialog: React.FC<NewAppointmentDialogProps> = ({
                 required
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="reason">Reason</Label>
+            <Input
+              id="reason"
+              placeholder="Enter reason for the appointment"
+              value={formData.reason}
+              onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
+              required
+            />
           </div>
 
           <div className="space-y-2">

@@ -1,18 +1,15 @@
-
 // Updated interface to match backend API specification
 export interface Appointment {
   id: number;
   patientId: number;
   doctorId: number;
-  departmentId: number;
-  createdById?: number;
-  appointmentDateTime: string; // ISO format from backend
-  status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW';
+  appointmentDate: string; // ISO format from backend
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NOSHOW';
+  reason: string;
   notes?: string;
-  cancellationReason?: string;
   createdAt: string;
   updatedAt?: string;
-  
+
   // These fields might be populated by frontend joins or separate API calls
   patientName?: string;
   doctorName?: string;
@@ -20,17 +17,16 @@ export interface Appointment {
 }
 
 export interface CreateAppointmentRequest {
-  patientId?: number;
-  patientName?: string;
+  patientId: number;
   doctorId: number;
-  departmentId: number;
-  appointmentDateTime: string; // ISO format
-  createdById?: number;
+  appointmentDate: string; // ISO format
+  reason: string;
   notes?: string;
 }
 
 export interface UpdateAppointmentRequest {
-  appointmentDateTime?: string;
-  status?: string;
+  appointmentDate?: string;
+  status?: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NOSHOW';
+  reason?: string;
   notes?: string;
 }

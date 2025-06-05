@@ -9,6 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import NewAppointmentDialog from '@/components/appointments/NewAppointmentDialog';
 import AppointmentDetailDialog from '@/components/appointments/AppointmentDetailDialog';
 import { Appointment } from '@/types/appointment';
+import { appointmentsAPI, patientsAPI, departmentsAPI } from '@/services/api';
+import dateUtils from '@/utils/dateUtils';
 
 // Define the extended appointment interface for display
 interface ExtendedAppointment extends Appointment {
@@ -29,7 +31,7 @@ interface CalendarAppointment {
 }
 
 const Calendar = () => {
-  const { state } = useAuth();
+  const { state, hasRole } = useAuth();
   const { user } = state;
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -47,63 +49,31 @@ const Calendar = () => {
   const fetchAppointmentsForDate = async (date: Date) => {
     try {
       setIsLoading(true);
-      // Mock data - replace with actual API call
-      const mockAppointments: ExtendedAppointment[] = [
-        {
-          id: 1,
-          patientId: 100,
-          doctorId: 200,
-          departmentId: 10,
-          appointmentDateTime: `${date.toISOString().split('T')[0]} 09:00`,
-          status: 'SCHEDULED',
-          notes: 'Regular checkup',
-          createdAt: new Date().toISOString(),
-          patientName: 'John Doe',
-          doctorName: 'Dr. Sarah Johnson',
-          department: 'Cardiology'
-        },
-        {
-          id: 2,
-          patientId: 101,
-          doctorId: 201,
-          departmentId: 11,
-          appointmentDateTime: `${date.toISOString().split('T')[0]} 10:30`,
-          status: 'IN_PROGRESS',
-          notes: 'Follow-up consultation',
-          createdAt: new Date().toISOString(),
-          patientName: 'Mary Smith',
-          doctorName: 'Dr. Michael Chen',
-          department: 'Neurology'
-        },
-        {
-          id: 3,
-          patientId: 102,
-          doctorId: 202,
-          departmentId: 12,
-          appointmentDateTime: `${date.toISOString().split('T')[0]} 14:00`,
-          status: 'SCHEDULED',
-          notes: 'Vaccination appointment',
-          createdAt: new Date().toISOString(),
-          patientName: 'Robert Johnson',
-          doctorName: 'Dr. Emily Rodriguez',
-          department: 'Pediatrics'
-        },
-        {
-          id: 4,
-          patientId: 103,
-          doctorId: 203,
-          departmentId: 13,
-          appointmentDateTime: `${date.toISOString().split('T')[0]} 16:15`,
-          status: 'COMPLETED',
-          notes: 'Emergency consultation',
-          createdAt: new Date().toISOString(),
-          patientName: 'Lisa Wilson',
-          doctorName: 'Dr. Robert Kim',
-          department: 'Emergency'
-        }
-      ];
-      
-      setAppointments(mockAppointments);
+      const formattedDate = dateUtils.toBackendFormat(date);
+
+      // Get all appointments and filter by date
+      const appointmentsData = await appointmentsAPI.getAll();
+      const filteredAppointments = appointmentsData.filter(apt =>
+        apt.appointmentDate.startsWith(formattedDate.split(' ')[0])
+      );
+
+      // Transform the data to include additional information
+      const extendedAppointments: ExtendedAppointment[] = await Promise.all(
+        filteredAppointments.map(async (apt) => {
+          // Fetch patient and department details
+          const patient = await patientsAPI.getById(apt.patientId);
+          const department = await departmentsAPI.getById(apt.departmentId);
+
+          return {
+            ...apt,
+            patientName: `${patient.firstName} ${patient.lastName}`,
+            doctorName: apt.doctorName, // Use the doctorName directly from the appointment
+            department: department.name
+          };
+        })
+      );
+
+      setAppointments(extendedAppointments);
     } catch (error) {
       console.error('Error fetching appointments:', error);
       toast({
@@ -140,7 +110,7 @@ const Calendar = () => {
 
   const getAppointmentForTimeSlot = (time: string) => {
     return appointments.find(apt => {
-      const [, appointmentTime] = apt.appointmentDateTime.split(' ');
+      const appointmentTime = dateUtils.formatDisplayTime(apt.appointmentDate);
       return appointmentTime === time;
     });
   };
@@ -151,7 +121,7 @@ const Calendar = () => {
   };
 
   const canCreateAppointment = () => {
-    return user?.role === 'ADMIN' || user?.role === 'HELPDESK';
+    return hasRole('ADMIN') || hasRole('HELPDESK');
   };
 
   const getWeekDates = (date: Date) => {
@@ -186,11 +156,11 @@ const Calendar = () => {
     <Card className="lg:col-span-3">
       <CardHeader>
         <CardTitle>
-          {selectedDate.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+          {selectedDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
           })}
         </CardTitle>
         <CardDescription>
@@ -204,17 +174,15 @@ const Calendar = () => {
             return (
               <div
                 key={timeSlot}
-                className={`flex items-center p-3 border rounded-lg transition-colors cursor-pointer ${
-                  appointment 
-                    ? 'bg-blue-50 border-blue-200 hover:bg-blue-100' 
-                    : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                }`}
+                className={`flex items-center p-3 border rounded-lg transition-colors cursor-pointer ${appointment
+                  ? 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                  : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  }`}
                 onClick={() => appointment && handleAppointmentClick(appointment)}
               >
                 <div className="w-20 text-sm font-medium text-gray-600">
                   {timeSlot}
                 </div>
-                
                 {appointment ? (
                   <div className="flex-1 flex items-center justify-between">
                     <div>
@@ -233,9 +201,9 @@ const Calendar = () => {
                 ) : (
                   <div className="flex-1 flex items-center justify-between">
                     <p className="text-gray-400 italic">Available</p>
-                    {(user?.role === 'ADMIN' || user?.role === 'HELPDESK') && (
-                      <Button 
-                        size="sm" 
+                    {canCreateAppointment() && (
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -257,7 +225,7 @@ const Calendar = () => {
 
   const renderWeekView = () => {
     const weekDates = getWeekDates(selectedDate);
-    
+
     return (
       <Card className="lg:col-span-3">
         <CardHeader>
@@ -275,19 +243,20 @@ const Calendar = () => {
                 <div>{date.getDate()}</div>
               </div>
             ))}
-            
+
             {timeSlots.slice(0, 12).map((time) => (
               <React.Fragment key={time}>
                 <div className="text-xs text-gray-500 py-2">{time}</div>
                 {weekDates.map((date, dateIndex) => {
                   const dayAppointments = appointments.filter(apt => {
-                    const [appointmentDate, appointmentTime] = apt.appointmentDateTime.split(' ');
-                    return appointmentDate === date.toISOString().split('T')[0] && appointmentTime === time;
+                    const appointmentDate = dateUtils.formatDisplayDate(apt.appointmentDate);
+                    const appointmentTime = dateUtils.formatDisplayTime(apt.appointmentDate);
+                    return appointmentDate === date.toLocaleDateString() && appointmentTime === time;
                   });
                   return (
                     <div key={dateIndex} className="min-h-[40px] border rounded p-1">
                       {dayAppointments.map(apt => (
-                        <div 
+                        <div
                           key={apt.id}
                           className="text-xs bg-blue-100 rounded p-1 cursor-pointer hover:bg-blue-200"
                           onClick={() => handleAppointmentClick(apt)}
@@ -324,25 +293,24 @@ const Calendar = () => {
                 {day}
               </div>
             ))}
-            
+
             {monthDates.map((date, index) => {
               const dayAppointments = appointments.filter(apt => {
-                const [appointmentDate] = apt.appointmentDateTime.split(' ');
-                return appointmentDate === date.toISOString().split('T')[0];
+                const appointmentDate = dateUtils.formatDisplayDate(apt.appointmentDate);
+                return appointmentDate === date.toLocaleDateString();
               });
-              
+
               return (
-                <div 
-                  key={index} 
-                  className={`min-h-[100px] border rounded p-2 cursor-pointer hover:bg-gray-50 ${
-                    date.toDateString() === selectedDate.toDateString() ? 'bg-blue-50 border-blue-300' : ''
-                  }`}
+                <div
+                  key={index}
+                  className={`min-h-[100px] border rounded p-2 cursor-pointer hover:bg-gray-50 ${date.toDateString() === selectedDate.toDateString() ? 'bg-blue-50 border-blue-300' : ''
+                    }`}
                   onClick={() => setSelectedDate(date)}
                 >
                   <div className="font-medium text-sm">{date.getDate()}</div>
                   <div className="space-y-1 mt-1">
                     {dayAppointments.slice(0, 3).map(apt => (
-                      <div 
+                      <div
                         key={apt.id}
                         className="text-xs bg-blue-100 rounded p-1 cursor-pointer hover:bg-blue-200"
                         onClick={(e) => {
@@ -430,7 +398,7 @@ const Calendar = () => {
                 onSelect={(date) => date && setSelectedDate(date)}
                 className="rounded-md border pointer-events-auto"
               />
-              
+
               <div className="mt-4 space-y-2">
                 <div className="text-sm font-medium">Legend</div>
                 <div className="flex items-center gap-2">

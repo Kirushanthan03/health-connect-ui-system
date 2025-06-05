@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { appointmentsAPI } from '@/services/api';
+import { appointmentsAPI, departmentsAPI } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
@@ -22,7 +21,7 @@ interface Appointment {
 }
 
 const Dashboard = () => {
-  const { state } = useAuth();
+  const { state, hasRole } = useAuth();
   const { user } = state;
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -34,32 +33,10 @@ const Dashboard = () => {
     cancelled: 0,
     inProgress: 0,
   });
+  const [departmentData, setDepartmentData] = useState([]);
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [statusData, setStatusData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Chart data
-  const departmentData = [
-    { name: 'Cardiology', value: 32, color: '#1976d2' },
-    { name: 'Neurology', value: 28, color: '#4caf50' },
-    { name: 'Pediatrics', value: 45, color: '#ff9800' },
-    { name: 'Emergency', value: 67, color: '#f44336' },
-  ];
-
-  const weeklyData = [
-    { day: 'Mon', appointments: 24 },
-    { day: 'Tue', appointments: 31 },
-    { day: 'Wed', appointments: 28 },
-    { day: 'Thu', appointments: 35 },
-    { day: 'Fri', appointments: 42 },
-    { day: 'Sat', appointments: 19 },
-    { day: 'Sun', appointments: 8 },
-  ];
-
-  const statusData = [
-    { name: 'Scheduled', value: 45, color: '#1976d2' },
-    { name: 'Completed', value: 32, color: '#4caf50' },
-    { name: 'In Progress', value: 8, color: '#ff9800' },
-    { name: 'Cancelled', value: 15, color: '#f44336' },
-  ];
 
   useEffect(() => {
     fetchDashboardData();
@@ -68,17 +45,63 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setIsLoading(true);
+
+      // Fetch appointments
       const appointmentsData = await appointmentsAPI.getAll();
       setAppointments(appointmentsData.slice(0, 5)); // Show only recent 5
-      
+
       // Calculate stats
       const total = appointmentsData.length;
-      const scheduled = appointmentsData.filter((app: Appointment) => app.status === 'SCHEDULED').length;
-      const completed = appointmentsData.filter((app: Appointment) => app.status === 'COMPLETED').length;
-      const cancelled = appointmentsData.filter((app: Appointment) => app.status === 'CANCELLED').length;
-      const inProgress = appointmentsData.filter((app: Appointment) => app.status === 'IN_PROGRESS').length;
-      
+      const scheduled = appointmentsData.filter(app => app.status === 'SCHEDULED').length;
+      const completed = appointmentsData.filter(app => app.status === 'COMPLETED').length;
+      const cancelled = appointmentsData.filter(app => app.status === 'CANCELLED').length;
+      const inProgress = appointmentsData.filter(app => app.status === 'IN_PROGRESS').length;
+
       setStats({ total, scheduled, completed, cancelled, inProgress });
+
+      // Fetch department statistics
+      const departments = await departmentsAPI.getAll();
+      const departmentStats = await Promise.all(
+        departments.map(async (dept) => {
+          const deptAppointments = appointmentsData.filter(app => app.departmentId === dept.id);
+          return {
+            name: dept.name,
+            value: deptAppointments.length,
+            color: dept.color || '#1976d2'
+          };
+        })
+      );
+      setDepartmentData(departmentStats);
+
+      // Calculate weekly data
+      const today = new Date();
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay());
+
+      const weeklyStats = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date(weekStart);
+        date.setDate(weekStart.getDate() + i);
+        const dayAppointments = appointmentsData.filter(app => {
+          const appDate = new Date(app.appointmentDate);
+          return appDate.toDateString() === date.toDateString();
+        });
+
+        return {
+          day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+          appointments: dayAppointments.length
+        };
+      });
+      setWeeklyData(weeklyStats);
+
+      // Calculate status data
+      const statusStats = [
+        { name: 'Scheduled', value: scheduled, color: '#1976d2' },
+        { name: 'Completed', value: completed, color: '#4caf50' },
+        { name: 'In Progress', value: inProgress, color: '#ff9800' },
+        { name: 'Cancelled', value: cancelled, color: '#f44336' }
+      ];
+      setStatusData(statusStats);
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       toast({
@@ -107,16 +130,14 @@ const Dashboard = () => {
   };
 
   const getRoleSpecificGreeting = () => {
-    switch (user?.role) {
-      case 'ADMIN':
-        return 'Admin Dashboard Overview';
-      case 'DOCTOR':
-        return `Welcome Dr. ${user.lastName}`;
-      case 'HELPDESK':
-        return 'Help Desk Dashboard';
-      default:
-        return 'Hospital Management Dashboard';
+    if (hasRole('ADMIN')) {
+      return 'Admin Dashboard Overview';
+    } else if (hasRole('DOCTOR')) {
+      return `Welcome Dr. ${user?.username}`;
+    } else if (hasRole('HELPDESK')) {
+      return 'Help Desk Dashboard';
     }
+    return 'Hospital Management Dashboard';
   };
 
   const chartConfig = {
@@ -148,11 +169,11 @@ const Dashboard = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">{getRoleSpecificGreeting()}</h1>
           <p className="text-gray-600">
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            {new Date().toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
             })}
           </p>
         </div>
@@ -355,7 +376,7 @@ const Dashboard = () => {
       </Card>
 
       {/* Quick Actions for Admin */}
-      {user?.role === 'ADMIN' && (
+      {hasRole('ADMIN') && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/users')}>
             <CardHeader>

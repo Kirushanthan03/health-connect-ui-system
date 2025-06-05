@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +21,7 @@ interface User {
 }
 
 const Users = () => {
-  const { state } = useAuth();
+  const { state, hasRole } = useAuth();
   const { user } = state;
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
@@ -110,11 +109,11 @@ const Users = () => {
     try {
       // Mock API call - replace with actual API
       console.log(`Toggling user ${userId} status to ${!currentStatus}`);
-      
-      setUsers(prev => prev.map(u => 
+
+      setUsers(prev => prev.map(u =>
         u.id === userId ? { ...u, isActive: !currentStatus } : u
       ));
-      
+
       toast({
         title: "Success",
         description: `User ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
@@ -142,7 +141,7 @@ const Users = () => {
     }
   };
 
-  if (user?.role !== 'ADMIN') {
+  if (!hasRole('ADMIN')) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-screen">
@@ -253,8 +252,8 @@ const Users = () => {
                         <Button size="sm" variant="outline">
                           Edit
                         </Button>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant={userData.isActive ? 'destructive' : 'default'}
                           onClick={() => handleToggleUserStatus(userData.id, userData.isActive)}
                         >

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,37 +6,94 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import { appointmentsAPI, departmentsAPI } from '@/services/api';
 
 const Reports = () => {
-  const { state } = useAuth();
+  const { state, hasRole } = useAuth();
   const { user } = state;
+  const { toast } = useToast();
   const [selectedPeriod, setSelectedPeriod] = useState('month');
   const [isLoading, setIsLoading] = useState(true);
+  const [appointmentsByDepartment, setAppointmentsByDepartment] = useState([]);
+  const [appointmentStatusData, setAppointmentStatusData] = useState([]);
+  const [monthlyTrends, setMonthlyTrends] = useState([]);
 
-  // Mock data for charts
-  const appointmentsByDepartment = [
-    { name: 'Cardiology', appointments: 145, revenue: 72500 },
-    { name: 'Neurology', appointments: 98, revenue: 58800 },
-    { name: 'Pediatrics', appointments: 203, revenue: 40600 },
-    { name: 'Emergency', apartments: 312, revenue: 93600 },
-    { name: 'Orthopedics', appointments: 87, revenue: 43500 },
-  ];
+  useEffect(() => {
+    fetchReportData();
+  }, [selectedPeriod]);
 
-  const appointmentStatusData = [
-    { name: 'Scheduled', value: 342, color: '#1976d2' },
-    { name: 'Completed', value: 198, color: '#4caf50' },
-    { name: 'Cancelled', value: 45, color: '#f44336' },
-    { name: 'In Progress', value: 23, color: '#ff9800' },
-  ];
+  const fetchReportData = async () => {
+    try {
+      setIsLoading(true);
 
-  const monthlyTrends = [
-    { month: 'Jan', appointments: 245, patients: 198 },
-    { month: 'Feb', appointments: 278, patients: 224 },
-    { month: 'Mar', appointments: 323, patients: 267 },
-    { month: 'Apr', appointments: 298, patients: 245 },
-    { month: 'May', appointments: 356, patients: 289 },
-    { month: 'Jun', appointments: 401, patients: 324 },
-  ];
+      // Fetch all appointments
+      const appointments = await appointmentsAPI.getAll();
+
+      // Fetch departments
+      const departments = await departmentsAPI.getAll();
+
+      // Calculate department statistics
+      const deptStats = await Promise.all(
+        departments.map(async (dept) => {
+          const deptAppointments = appointments.filter(app => app.departmentId === dept.id);
+          return {
+            name: dept.name,
+            appointments: deptAppointments.length,
+            revenue: deptAppointments.reduce((sum, app) => sum + (app.fee || 0), 0)
+          };
+        })
+      );
+      setAppointmentsByDepartment(deptStats);
+
+      // Calculate appointment status data
+      const statusStats = [
+        { name: 'Scheduled', value: appointments.filter(app => app.status === 'SCHEDULED').length, color: '#1976d2' },
+        { name: 'Completed', value: appointments.filter(app => app.status === 'COMPLETED').length, color: '#4caf50' },
+        { name: 'Cancelled', value: appointments.filter(app => app.status === 'CANCELLED').length, color: '#f44336' },
+        { name: 'In Progress', value: appointments.filter(app => app.status === 'IN_PROGRESS').length, color: '#ff9800' }
+      ];
+      setAppointmentStatusData(statusStats);
+
+      // Calculate monthly trends
+      const months = Array.from({ length: 6 }, (_, i) => {
+        const date = new Date();
+        date.setMonth(date.getMonth() - i);
+        return date;
+      }).reverse();
+
+      const trends = await Promise.all(
+        months.map(async (month) => {
+          const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+          const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+
+          const monthAppointments = appointments.filter(app => {
+            const appDate = new Date(app.appointmentDate);
+            return appDate >= monthStart && appDate <= monthEnd;
+          });
+
+          const uniquePatients = new Set(monthAppointments.map(app => app.patientId));
+
+          return {
+            month: month.toLocaleDateString('en-US', { month: 'short' }),
+            appointments: monthAppointments.length,
+            patients: uniquePatients.size
+          };
+        })
+      );
+      setMonthlyTrends(trends);
+
+    } catch (error) {
+      console.error('Error fetching report data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load report data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const doctorPerformance = [
     { name: 'Dr. Sarah Johnson', appointments: 89, rating: 4.8, department: 'Cardiology' },
@@ -47,14 +103,7 @@ const Reports = () => {
     { name: 'Dr. Lisa Wang', appointments: 67, rating: 4.8, department: 'Orthopedics' },
   ];
 
-  useEffect(() => {
-    // Mock loading delay
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-  }, [selectedPeriod]);
-
-  if (user?.role !== 'ADMIN' && user?.role !== 'DOCTOR') {
+  if (!hasRole('ADMIN') && !hasRole('DOCTOR')) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-screen">
@@ -272,7 +321,7 @@ const Reports = () => {
         </div>
 
         {/* Revenue Table */}
-        {user?.role === 'ADMIN' && (
+        {hasRole('ADMIN') && (
           <Card>
             <CardHeader>
               <CardTitle>Revenue by Department</CardTitle>

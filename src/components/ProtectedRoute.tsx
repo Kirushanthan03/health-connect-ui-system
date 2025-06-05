@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/auth/LoginForm';
@@ -8,12 +7,12 @@ interface ProtectedRouteProps {
   allowedRoles?: string[];
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
-  children, 
-  allowedRoles 
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  allowedRoles
 }) => {
-  const { state } = useAuth();
-  const { isAuthenticated, isLoading, user } = state;
+  const { state, hasRole } = useAuth();
+  const { isAuthenticated, isLoading } = state;
 
   if (isLoading) {
     return (
@@ -30,7 +29,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <LoginForm />;
   }
 
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && !allowedRoles.some(role => hasRole(role))) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

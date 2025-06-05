@@ -16,10 +16,12 @@ interface ExtendedAppointment extends Appointment {
   patientName: string;
   doctorName: string;
   department: string;
+  appointmentDateTime: string;
+  cancellationReason?: string;
 }
 
 const Appointments = () => {
-  const { state } = useAuth();
+  const { state, hasRole } = useAuth();
   const { user } = state;
   const { toast } = useToast();
   const [appointments, setAppointments] = useState<ExtendedAppointment[]>([]);
@@ -43,35 +45,35 @@ const Appointments = () => {
     try {
       setIsLoading(true);
       const data = await appointmentsAPI.getAll();
-      
+
       // Get unique IDs for lookup - properly type as numbers with safe conversion
       const patientIds: number[] = [...new Set(data.map((apt: any) => {
         const id = parseInt(String(apt.patientId), 10);
         return isNaN(id) ? null : id;
       }))].filter((id): id is number => id !== null);
-      
+
       const doctorIds: number[] = [...new Set(data.map((apt: any) => {
         const id = parseInt(String(apt.doctorId), 10);
         return isNaN(id) ? null : id;
       }))].filter((id): id is number => id !== null);
-      
+
       const departmentIds: number[] = [...new Set(data.map((apt: any) => {
         const id = parseInt(String(apt.departmentId), 10);
         return isNaN(id) ? null : id;
       }))].filter((id): id is number => id !== null);
-      
+
       // Fetch names for all entities
       const [patientNames, doctorNames, departmentNames] = await Promise.all([
         lookupAPI.getNames('patients', patientIds),
         lookupAPI.getNames('doctors', doctorIds),
         lookupAPI.getNames('departments', departmentIds)
       ]);
-      
+
       // Create lookup maps
       const patientMap = new Map(patientNames.map((p: any) => [p.id, p.name]));
       const doctorMap = new Map(doctorNames.map((d: any) => [d.id, d.name]));
       const departmentMap = new Map(departmentNames.map((dept: any) => [dept.id, dept.name]));
-      
+
       // Transform data with display names
       const transformedData: ExtendedAppointment[] = data.map((apt: any) => ({
         ...apt,
@@ -79,7 +81,7 @@ const Appointments = () => {
         doctorName: doctorMap.get(apt.doctorId) || `Doctor ${apt.doctorId}`,
         department: departmentMap.get(apt.departmentId) || `Department ${apt.departmentId}`,
       }));
-      
+
       setAppointments(transformedData);
     } catch (error) {
       console.error('Error fetching appointments:', error);
@@ -113,19 +115,19 @@ const Appointments = () => {
     setFilteredAppointments(filtered);
   };
 
-  const handleStatusUpdate = async (appointmentId: number, newStatus: string) => {
+  const handleStatusUpdate = async (appointmentId: number, newStatus: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NOSHOW') => {
     try {
-      await appointmentsAPI.updateStatus(appointmentId, newStatus as any);
+      await appointmentsAPI.updateStatus(appointmentId, newStatus);
       toast({
         title: "Success",
         description: "Appointment status updated successfully",
       });
-      fetchAppointments(); // Refresh the list
+      fetchAppointments();
     } catch (error) {
       console.error('Error updating appointment status:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update appointment status",
+        description: "Failed to update appointment status",
         variant: "destructive",
       });
     }
@@ -139,35 +141,32 @@ const Appointments = () => {
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'SCHEDULED':
-      case 'CONFIRMED':
         return 'default';
       case 'IN_PROGRESS':
         return 'secondary';
       case 'COMPLETED':
         return 'outline';
       case 'CANCELLED':
-      case 'NO_SHOW':
+      case 'NOSHOW':
         return 'destructive';
-      case 'RESCHEDULED':
-        return 'secondary';
       default:
         return 'default';
     }
   };
 
   const canUpdateStatus = (status: string) => {
-    if (user?.role === 'ADMIN') return true;
-    if (user?.role === 'DOCTOR') {
-      return ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'].includes(status);
+    if (hasRole('ADMIN')) return true;
+    if (hasRole('DOCTOR')) {
+      return ['SCHEDULED', 'IN_PROGRESS'].includes(status);
     }
-    if (user?.role === 'HELPDESK') {
+    if (hasRole('HELPDESK')) {
       return ['SCHEDULED'].includes(status);
     }
     return false;
   };
 
   const canCreateAppointment = () => {
-    return user?.role === 'ADMIN' || user?.role === 'HELPDESK';
+    return hasRole('ADMIN') || hasRole('HELPDESK');
   };
 
   if (isLoading) {
@@ -183,7 +182,7 @@ const Appointments = () => {
     );
   }
 
-  const allStatuses = ['ALL', 'SCHEDULED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'RESCHEDULED', 'NO_SHOW'];
+  const allStatuses = ['ALL', 'SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NOSHOW'];
 
   return (
     <Layout>
@@ -280,24 +279,6 @@ const Appointments = () => {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleStatusUpdate(appointment.id, 'CONFIRMED')}
-                                >
-                                  Confirm
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleStatusUpdate(appointment.id, 'IN_PROGRESS')}
-                                >
-                                  Start
-                                </Button>
-                              </>
-                            )}
-                            {appointment.status === 'CONFIRMED' && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
                                   onClick={() => handleStatusUpdate(appointment.id, 'IN_PROGRESS')}
                                 >
                                   Start
@@ -305,7 +286,7 @@ const Appointments = () => {
                                 <Button
                                   size="sm"
                                   variant="destructive"
-                                  onClick={() => handleStatusUpdate(appointment.id, 'NO_SHOW')}
+                                  onClick={() => handleStatusUpdate(appointment.id, 'NOSHOW')}
                                 >
                                   No Show
                                 </Button>

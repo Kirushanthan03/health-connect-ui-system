@@ -1,24 +1,42 @@
-
 const API_BASE_URL = 'http://localhost:8080/api';
 
-// Get token from localStorage
-const getToken = () => localStorage.getItem('token');
+// Token handling functions
+const getToken = () => {
+  const tokenData = localStorage.getItem('token');
+  if (!tokenData) return null;
+
+  try {
+    const { token, type } = JSON.parse(tokenData);
+    return `${type} ${token}`;
+  } catch (error) {
+    console.error('Error parsing token:', error);
+    return null;
+  }
+};
+
+const setToken = (tokenData: { token: string; type: string }) => {
+  localStorage.setItem('token', JSON.stringify(tokenData));
+};
+
+const removeToken = () => {
+  localStorage.removeItem('token');
+};
 
 // Generic API call function
 const apiCall = async (endpoint: string, options: RequestInit = {}) => {
   const token = getToken();
-  
+
   const config: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(token && { Authorization: token }),
       ...options.headers,
     },
     ...options,
   };
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || `API Error: ${response.status}`);
@@ -34,113 +52,129 @@ const apiCall = async (endpoint: string, options: RequestInit = {}) => {
 
 // Authentication API
 export const authAPI = {
-  signin: (credentials: { username: string; password: string }) =>
-    fetch(`${API_BASE_URL}/auth/signin`, {
+  signin: async (credentials: { username: string; password: string }) => {
+    const response = await fetch(`${API_BASE_URL}/auth/signin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
-    }).then(res => res.json()),
-    
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Authentication failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    // Store token data
+    setToken({
+      token: data.token,
+      type: data.type
+    });
+
+    return data;
+  },
+
   signup: (userData: any) =>
     apiCall('/auth/signup', {
       method: 'POST',
       body: JSON.stringify(userData),
     }),
+
+  signout: () => {
+    removeToken();
+  },
+
+  getCurrentUser: () => apiCall('/auth/me'),
 };
 
 // Appointments API
 export const appointmentsAPI = {
   // Get all appointments
   getAll: () => apiCall('/appointments'),
-  
+
   // Get appointment by ID
   getById: (id: number) => apiCall(`/appointments/${id}`),
-  
+
   // Create new appointment
   create: (appointment: {
-    patientId?: number;
-    patientName?: string;
+    patientId: number;
     doctorId: number;
-    departmentId: number;
-    appointmentDateTime: string; // Format: YYYY-MM-DD HH:MM
-    createdById?: number;
+    appointmentDate: string; // Format: yyyy-MM-dd'T'HH:mm:ss
+    reason: string;
     notes?: string;
   }) => apiCall('/appointments', {
     method: 'POST',
     body: JSON.stringify(appointment),
   }),
-  
+
   // Update appointment
   update: (id: number, appointment: {
-    appointmentDateTime?: string;
-    status?: string;
+    appointmentDate?: string;
+    status?: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NOSHOW';
+    reason?: string;
     notes?: string;
   }) => apiCall(`/appointments/${id}`, {
     method: 'PUT',
     body: JSON.stringify(appointment),
   }),
-  
+
   // Delete appointment
   delete: (id: number) => apiCall(`/appointments/${id}`, {
     method: 'DELETE',
   }),
-  
+
   // Get appointments by doctor
-  getByDoctor: (doctorId: number, start?: string, end?: string) => {
-    const params = new URLSearchParams();
-    if (start) params.append('start', start);
-    if (end) params.append('end', end);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return apiCall(`/appointments/doctor/${doctorId}${query}`);
-  },
-  
+  getByDoctor: (doctorId: number) => apiCall(`/appointments/doctor/${doctorId}`),
+
   // Get appointments by patient
   getByPatient: (patientId: number) => apiCall(`/appointments/patient/${patientId}`),
-  
+
   // Get appointments by department
   getByDepartment: (departmentId: number) => apiCall(`/appointments/department/${departmentId}`),
-  
+
   // Update appointment status
-  updateStatus: (id: number, status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW') =>
+  updateStatus: (id: number, status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NOSHOW') =>
     apiCall(`/appointments/${id}/status/${status}`, {
       method: 'PUT',
     }),
-  
-  // Cancel appointment with reason
-  cancel: (id: number, reason: string) => apiCall(`/appointments/${id}/cancel`, {
-    method: 'PUT',
-    body: JSON.stringify({ reason }),
-  }),
-  
+
+  // Cancel appointment
+  cancel: (id: number, cancellationReason: string) =>
+    apiCall(`/appointments/${id}/cancel`, {
+      method: 'PUT',
+      body: JSON.stringify({ cancellationReason }),
+    }),
+
   // Reschedule appointment
-  reschedule: (id: number, newDateTime: string) => apiCall(`/appointments/${id}/reschedule`, {
-    method: 'PUT',
-    body: JSON.stringify({ newDateTime }),
-  }),
+  reschedule: (id: number, newAppointmentDate: string) =>
+    apiCall(`/appointments/${id}/reschedule`, {
+      method: 'PUT',
+      body: JSON.stringify({ newAppointmentDate }),
+    }),
 };
 
 // Patients API - Updated to use users/patients endpoint
 export const patientsAPI = {
   getAll: (search?: string, page?: number, size?: number) => {
     // Since patients are managed through users API, we use the users/patients endpoint
-    return apiCall('/api/patients').then(data => {
+    return apiCall('/patients').then(data => {
       // Transform to match expected format for backward compatibility
       let filtered = data;
       if (search) {
-        filtered = data.filter((patient: any) => 
+        filtered = data.filter((patient: any) =>
           patient.fullName.toLowerCase().includes(search.toLowerCase()) ||
           patient.email.toLowerCase().includes(search.toLowerCase()) ||
           patient.phoneNumber.includes(search)
         );
       }
-      
+
       // Apply pagination if specified
       if (page !== undefined && size !== undefined) {
         const start = page * size;
         const end = start + size;
         filtered = filtered.slice(start, end);
       }
-      
+
       // Transform to match expected response format
       return {
         content: filtered.map((patient: any) => ({
@@ -157,8 +191,11 @@ export const patientsAPI = {
       };
     });
   },
-  
-  // Add patient creation functionality - this would make a request to create a patient
+
+  // Get patient by ID
+  getById: (id: number) => apiCall(`/patients/${id}`),
+
+  // Add patient creation functionality
   create: (patientData: {
     firstName: string;
     lastName: string;
@@ -170,26 +207,50 @@ export const patientsAPI = {
     medicalHistory?: string;
     insuranceInfo?: string;
   }) => {
-    // Based on the API structure, we assume patient creation happens through the user creation endpoint
-    // or a special patient creation endpoint. Since it's not explicitly shown in the controllers,
-    // we'll implement a placeholder that can be updated once the exact endpoint is confirmed
-    
-    // Prepare the data in the format expected by the backend
     const userData = {
-  firstName: patientData.firstName,
-  lastName: patientData.lastName,
-  email: patientData.email,
-  phone: patientData.phone,
-  dateOfBirth: patientData.dateOfBirth,
-  address: patientData.address,
-  emergencyContact: patientData.emergencyContact,
-  medicalHistory: patientData.medicalHistory,
-  insuranceInfo: patientData.insuranceInfo
-};
-    
-    // This is a placeholder. Replace with the actual endpoint when confirmed
+      firstName: patientData.firstName,
+      lastName: patientData.lastName,
+      email: patientData.email,
+      phone: patientData.phone,
+      dateOfBirth: patientData.dateOfBirth,
+      address: patientData.address,
+      emergencyContact: patientData.emergencyContact,
+      medicalHistory: patientData.medicalHistory,
+      insuranceInfo: patientData.insuranceInfo
+    };
+
     return apiCall('/patients', {
       method: 'POST',
+      body: JSON.stringify(userData)
+    });
+  },
+
+  // Add patient update functionality
+  update: (id: number, patientData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    dateOfBirth: string;
+    address?: string;
+    emergencyContact?: string;
+    medicalHistory?: string;
+    insuranceInfo?: string;
+  }) => {
+    const userData = {
+      firstName: patientData.firstName,
+      lastName: patientData.lastName,
+      email: patientData.email,
+      phone: patientData.phone,
+      dateOfBirth: patientData.dateOfBirth,
+      address: patientData.address,
+      emergencyContact: patientData.emergencyContact,
+      medicalHistory: patientData.medicalHistory,
+      insuranceInfo: patientData.insuranceInfo
+    };
+
+    return apiCall(`/patients/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(userData)
     });
   }
@@ -261,7 +322,7 @@ export const usersAPI = {
   getAll: () => apiCall('/users'),
   getById: (id: number) => apiCall(`/users/${id}`),
   getDoctors: () => apiCall('/users/doctors'),
-  getPatients: () => apiCall('/patients'),
+  // getPatients: () => apiCall('/patients'),
   getHelpdesk: () => apiCall('/users/helpdesk'),
   getProfile: () => apiCall('/users/profile'),
   update: (id: number, user: any) =>
@@ -281,12 +342,12 @@ export const dateUtils = {
   toBackendFormat: (date: string, time: string): string => {
     return `${date} ${time}`;
   },
-  
+
   // Convert to ISO format for reschedule endpoint
   toISOFormat: (date: string, time: string): string => {
     return `${date}T${time}:00`;
   },
-  
+
   // Parse backend datetime format to frontend format
   parseDateTime: (appointmentDateTime: string) => {
     const [date, time] = appointmentDateTime.split(' ');
@@ -295,13 +356,13 @@ export const dateUtils = {
       time: time
     };
   },
-  
+
   // Format display date from backend
   formatDisplayDate: (appointmentDateTime: string): string => {
     const [date] = appointmentDateTime.split(' ');
     return new Date(date).toLocaleDateString();
   },
-  
+
   // Format display time from backend
   formatDisplayTime: (appointmentDateTime: string): string => {
     const [, time] = appointmentDateTime.split(' ');

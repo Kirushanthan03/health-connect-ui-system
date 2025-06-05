@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,20 +13,20 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { appointmentsAPI, dateUtils } from '@/services/api';
+import { appointmentsAPI } from '@/services/api';
+import dateUtils from '@/utils/dateUtils';
 
 interface Appointment {
   id: number;
-  patientId?: number;
-  doctorId?: number;
-  departmentId?: number;
+  patientId: number;
+  doctorId: number;
+  appointmentDate: string;
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NOSHOW';
+  reason: string;
+  notes?: string;
   patientName: string;
   doctorName: string;
   department: string;
-  appointmentDateTime: string; // ISO format
-  status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW';
-  notes?: string;
-  cancellationReason?: string;
 }
 
 interface AppointmentDetailDialogProps {
@@ -52,7 +51,7 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   const [rescheduleDate, setRescheduleDate] = useState<Date | undefined>(undefined);
   const [rescheduleTime, setRescheduleTime] = useState('');
   const { toast } = useToast();
-  const { state } = useAuth();
+  const { state, hasRole } = useAuth();
   const { user } = state;
 
   React.useEffect(() => {
@@ -70,81 +69,75 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'SCHEDULED':
-      case 'CONFIRMED':
         return 'default';
       case 'IN_PROGRESS':
         return 'secondary';
       case 'COMPLETED':
         return 'outline';
       case 'CANCELLED':
-      case 'NO_SHOW':
+      case 'NOSHOW':
         return 'destructive';
-      case 'RESCHEDULED':
-        return 'secondary';
       default:
         return 'default';
     }
   };
 
   const canUpdateStatus = () => {
-    if (user?.role === 'ADMIN') return true;
-    if (user?.role === 'DOCTOR') {
-      return ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'].includes(appointment.status);
+    if (hasRole('ADMIN')) return true;
+    if (hasRole('DOCTOR')) {
+      return ['SCHEDULED', 'IN_PROGRESS'].includes(appointment.status);
     }
-    if (user?.role === 'HELPDESK') {
+    if (hasRole('HELPDESK')) {
       return ['SCHEDULED'].includes(appointment.status);
     }
     return false;
   };
 
   const getAvailableStatuses = () => {
-    const allStatuses = ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'RESCHEDULED', 'NO_SHOW'];
-    
-    if (user?.role === 'ADMIN') {
+    const allStatuses = ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NOSHOW'];
+
+    if (hasRole('ADMIN')) {
       return allStatuses;
     }
-    if (user?.role === 'DOCTOR') {
+    if (hasRole('DOCTOR')) {
       if (appointment.status === 'SCHEDULED') {
-        return ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS', 'NO_SHOW'];
-      }
-      if (appointment.status === 'CONFIRMED') {
-        return ['CONFIRMED', 'IN_PROGRESS', 'NO_SHOW'];
+        return ['SCHEDULED', 'IN_PROGRESS', 'NOSHOW'];
       }
       if (appointment.status === 'IN_PROGRESS') {
         return ['IN_PROGRESS', 'COMPLETED'];
       }
     }
-    if (user?.role === 'HELPDESK') {
+    if (hasRole('HELPDESK')) {
       if (appointment.status === 'SCHEDULED') {
-        return ['SCHEDULED', 'CONFIRMED'];
+        return ['SCHEDULED'];
       }
     }
     return [appointment.status];
   };
 
-  const handleUpdateAppointment = async () => {
-    setIsLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appointment) return;
+
     try {
-      if (status !== appointment.status) {
-        await appointmentsAPI.updateStatus(appointment.id, status as any);
-      }
-      
-      if (notes !== (appointment.notes || '')) {
-        await appointmentsAPI.update(appointment.id, { notes });
-      }
-      
+      setIsLoading(true);
+      const updatedAppointment = {
+        status: status as 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NOSHOW',
+        notes
+      };
+
+      await appointmentsAPI.update(appointment.id, updatedAppointment);
       toast({
         title: "Success",
         description: "Appointment updated successfully",
       });
-      
       onAppointmentUpdated();
       onOpenChange(false);
     } catch (error) {
       console.error('Error updating appointment:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update appointment",
+        description: "Failed to update appointment",
         variant: "destructive",
       });
     } finally {
@@ -165,12 +158,10 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
     setIsLoading(true);
     try {
       await appointmentsAPI.cancel(appointment.id, cancelReason);
-      
       toast({
         title: "Success",
         description: "Appointment cancelled successfully",
       });
-      
       onAppointmentUpdated();
       onOpenChange(false);
       setShowCancelDialog(false);
@@ -198,19 +189,15 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
 
     setIsLoading(true);
     try {
-      // Use ISO format for reschedule endpoint
-      const newDateTime = dateUtils.toISOFormat(
-        format(rescheduleDate, 'yyyy-MM-dd'),
-        rescheduleTime
-      );
-      
-      await appointmentsAPI.reschedule(appointment.id, newDateTime);
-      
+      const newDateTime = dateUtils.toBackendFormat(rescheduleDate);
+      const [date] = newDateTime.split(' ');
+      const newAppointmentDate = `${date} ${rescheduleTime}`;
+
+      await appointmentsAPI.reschedule(appointment.id, newAppointmentDate);
       toast({
         title: "Success",
         description: "Appointment rescheduled successfully",
       });
-      
       onAppointmentUpdated();
       onOpenChange(false);
       setShowRescheduleDialog(false);
@@ -226,8 +213,6 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
     }
   };
 
-  const { date: displayDate, time: displayTime } = dateUtils.parseDateTime(appointment.appointmentDateTime);
-
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -238,7 +223,7 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
               View and manage appointment information
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-6">
             {/* Patient Information */}
             <div className="grid grid-cols-2 gap-4">
@@ -272,19 +257,19 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-sm font-medium text-gray-700">Date</Label>
-                <p className="text-base">{dateUtils.formatDisplayDate(appointment.appointmentDateTime)}</p>
+                <p className="text-base">{dateUtils.formatDisplayDate(appointment.appointmentDate)}</p>
               </div>
               <div>
                 <Label className="text-sm font-medium text-gray-700">Time</Label>
-                <p className="text-base">{dateUtils.formatDisplayTime(appointment.appointmentDateTime)}</p>
+                <p className="text-base">{dateUtils.formatDisplayTime(appointment.appointmentDate)}</p>
               </div>
             </div>
 
             {/* Cancellation Reason (if cancelled) */}
-            {appointment.cancellationReason && (
+            {appointment.reason && (
               <div>
                 <Label className="text-sm font-medium text-gray-700">Cancellation Reason</Label>
-                <p className="text-base text-red-600">{appointment.cancellationReason}</p>
+                <p className="text-base text-red-600">{appointment.reason}</p>
               </div>
             )}
 
@@ -328,18 +313,18 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
 
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
             <div className="flex flex-1 gap-2">
-              {['SCHEDULED', 'CONFIRMED'].includes(appointment.status) && canUpdateStatus() && (
+              {['SCHEDULED'].includes(appointment.status) && canUpdateStatus() && (
                 <>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => setShowRescheduleDialog(true)}
                     disabled={isLoading}
                     className="flex-1 sm:flex-none"
                   >
                     Reschedule
                   </Button>
-                  <Button 
-                    variant="destructive" 
+                  <Button
+                    variant="destructive"
                     onClick={() => setShowCancelDialog(true)}
                     disabled={isLoading}
                     className="flex-1 sm:flex-none"
@@ -349,20 +334,20 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
                 </>
               )}
             </div>
-            
+
             <div className="flex gap-2">
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={() => onOpenChange(false)}
                 className="flex-1 sm:flex-none"
               >
                 Close
               </Button>
-              
+
               {canUpdateStatus() && (status !== appointment.status || notes !== (appointment.notes || '')) && (
-                <Button 
-                  onClick={handleUpdateAppointment} 
+                <Button
+                  onClick={handleSubmit}
                   disabled={isLoading}
                   className="flex-1 sm:flex-none"
                 >
@@ -401,8 +386,8 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
             <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
               Back
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={handleCancelAppointment}
               disabled={isLoading || !cancelReason.trim()}
             >
@@ -467,7 +452,7 @@ const AppointmentDetailDialog: React.FC<AppointmentDetailDialogProps> = ({
             <Button variant="outline" onClick={() => setShowRescheduleDialog(false)}>
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleRescheduleAppointment}
               disabled={isLoading || !rescheduleDate || !rescheduleTime}
             >

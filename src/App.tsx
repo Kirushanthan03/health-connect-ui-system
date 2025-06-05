@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +8,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Appointments from "./pages/Appointments";
 import Patients from "./pages/Patients";
+import PatientDetails from "./pages/PatientDetails";
 import Users from "./pages/Users";
 import Departments from "./pages/Departments";
 import Reports from "./pages/Reports";
@@ -29,61 +29,69 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/signup" element={<Signup />} />
-            <Route 
-              path="/dashboard" 
+            <Route
+              path="/dashboard"
               element={
                 <ProtectedRoute>
                   <Dashboard />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/appointments" 
+            <Route
+              path="/appointments"
               element={
                 <ProtectedRoute>
                   <Appointments />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/patients" 
+            <Route
+              path="/patients"
               element={
                 <ProtectedRoute>
                   <Patients />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/users" 
+            <Route
+              path="/patients/:id"
+              element={
+                <ProtectedRoute>
+                  <PatientDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
               element={
                 <ProtectedRoute allowedRoles={['ADMIN']}>
                   <Users />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/departments" 
+            <Route
+              path="/departments"
               element={
                 <ProtectedRoute>
                   <Departments />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/reports" 
+            <Route
+              path="/reports"
               element={
                 <ProtectedRoute allowedRoles={['ADMIN', 'DOCTOR']}>
                   <Reports />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/calendar" 
+            <Route
+              path="/calendar"
               element={
                 <ProtectedRoute>
                   <Calendar />
                 </ProtectedRoute>
-              } 
+              }
             />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

@@ -1,13 +1,12 @@
-
 import React from 'react';
-import { 
-  Sidebar, 
-  SidebarContent, 
-  SidebarGroup, 
-  SidebarGroupContent, 
-  SidebarGroupLabel, 
-  SidebarMenu, 
-  SidebarMenuButton, 
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter
@@ -17,7 +16,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
 const AppSidebar = () => {
-  const { state, logout } = useAuth();
+  const { state, logout, hasRole } = useAuth();
   const { user } = state;
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,7 +45,7 @@ const AppSidebar = () => {
       },
     ];
 
-    if (user?.role === 'ADMIN') {
+    if (hasRole('ADMIN')) {
       return [
         ...baseItems,
         {
@@ -72,7 +71,7 @@ const AppSidebar = () => {
       ];
     }
 
-    if (user?.role === 'DOCTOR') {
+    if (hasRole('DOCTOR')) {
       return [
         ...baseItems,
         {
@@ -88,7 +87,7 @@ const AppSidebar = () => {
       ];
     }
 
-    if (user?.role === 'HELPDESK') {
+    if (hasRole('HELPDESK')) {
       return [
         ...baseItems,
         {
@@ -130,11 +129,11 @@ const AppSidebar = () => {
             <SidebarMenu>
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton 
+                  <SidebarMenuButton
                     asChild
                     isActive={location.pathname === item.url}
                   >
-                    <a 
+                    <a
                       href={item.url}
                       onClick={(e) => {
                         e.preventDefault();
@@ -157,18 +156,20 @@ const AppSidebar = () => {
         <div className="space-y-3">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
-              {user?.firstName?.[0]}{user?.lastName?.[0]}
+              {user?.username?.[0]}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">
-                {user?.firstName} {user?.lastName}
+                {user?.username}
               </p>
-              <p className="text-xs text-gray-500 truncate">{user?.role}</p>
+              <p className="text-xs text-gray-500 truncate">
+                {user?.roles?.[0]?.replace('ROLE_', '')}
+              </p>
             </div>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleLogout}
             className="w-full"
           >

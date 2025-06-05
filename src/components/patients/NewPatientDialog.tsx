@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,16 +7,33 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { patientsAPI } from '@/services/api';
 
+interface Patient {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+  address: string;
+  emergencyContact: string;
+  medicalHistory: string;
+  insuranceInfo: string;
+}
+
 interface NewPatientDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPatientCreated: () => void;
+  editPatient?: Patient | null;
+  onClose?: () => void;
 }
 
 const NewPatientDialog: React.FC<NewPatientDialogProps> = ({
   open,
   onOpenChange,
   onPatientCreated,
+  editPatient,
+  onClose,
 }) => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -33,21 +49,21 @@ const NewPatientDialog: React.FC<NewPatientDialogProps> = ({
     insuranceInfo: '',
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      // Call the patient creation API
-      await patientsAPI.create(formData);
-      
-      toast({
-        title: "Success",
-        description: "Patient created successfully",
+  useEffect(() => {
+    if (editPatient) {
+      setFormData({
+        firstName: editPatient.firstName,
+        lastName: editPatient.lastName,
+        email: editPatient.email,
+        phone: editPatient.phone,
+        dateOfBirth: editPatient.dateOfBirth,
+        address: editPatient.address,
+        emergencyContact: editPatient.emergencyContact,
+        medicalHistory: editPatient.medicalHistory,
+        insuranceInfo: editPatient.insuranceInfo,
       });
-      
-      onPatientCreated();
-      onOpenChange(false);
+    } else {
+      // Reset form when opening for new patient
       setFormData({
         firstName: '',
         lastName: '',
@@ -59,11 +75,38 @@ const NewPatientDialog: React.FC<NewPatientDialogProps> = ({
         medicalHistory: '',
         insuranceInfo: '',
       });
+    }
+  }, [editPatient, open]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      if (editPatient) {
+        // Update existing patient
+        await patientsAPI.update(editPatient.id, formData);
+        toast({
+          title: "Success",
+          description: "Patient updated successfully",
+        });
+      } else {
+        // Create new patient
+        await patientsAPI.create(formData);
+        toast({
+          title: "Success",
+          description: "Patient created successfully",
+        });
+      }
+
+      onPatientCreated();
+      onOpenChange(false);
+      if (onClose) onClose();
     } catch (error) {
-      console.error('Error creating patient:', error);
+      console.error('Error saving patient:', error);
       toast({
         title: "Error",
-        description: "Failed to create patient",
+        description: `Failed to ${editPatient ? 'update' : 'create'} patient`,
         variant: "destructive",
       });
     } finally {
@@ -79,12 +122,12 @@ const NewPatientDialog: React.FC<NewPatientDialogProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add New Patient</DialogTitle>
+          <DialogTitle>{editPatient ? 'Edit Patient' : 'Add New Patient'}</DialogTitle>
           <DialogDescription>
-            Enter patient information to create a new record
+            {editPatient ? 'Update patient information' : 'Enter patient information to create a new record'}
           </DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -182,11 +225,14 @@ const NewPatientDialog: React.FC<NewPatientDialogProps> = ({
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => {
+              onOpenChange(false);
+              if (onClose) onClose();
+            }}>
               Cancel
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Creating...' : 'Create Patient'}
+              {isLoading ? 'Saving...' : editPatient ? 'Update Patient' : 'Create Patient'}
             </Button>
           </div>
         </form>

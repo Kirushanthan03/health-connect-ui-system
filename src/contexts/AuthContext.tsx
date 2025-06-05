@@ -1,88 +1,25 @@
-
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import { authAPI } from '@/services/api';
 
-export interface User {
+// Role types
+export type BackendRole = 'ROLE_ADMIN' | 'ROLE_DOCTOR' | 'ROLE_HELPDESK';
+export type FrontendRole = 'ADMIN' | 'DOCTOR' | 'HELPDESK';
+
+interface User {
   id: number;
   username: string;
   email: string;
-  role: 'ADMIN' | 'DOCTOR' | 'HELPDESK';
-  firstName: string;
-  lastName: string;
+  roles: BackendRole[];
 }
 
 interface AuthState {
   user: User | null;
-  token: string | null;
-  isLoading: boolean;
   isAuthenticated: boolean;
+  isLoading: boolean;
 }
 
-type AuthAction =
-  | { type: 'AUTH_START' }
-  | { type: 'AUTH_SUCCESS'; payload: { user: User; token: string } }
-  | { type: 'AUTH_FAILURE' }
-  | { type: 'LOGOUT' }
-  | { type: 'INITIALIZE'; payload: { user: User; token: string } | null };
-
-const initialState: AuthState = {
-  user: null,
-  token: null,
-  isLoading: true,
-  isAuthenticated: false,
-};
-
-const authReducer = (state: AuthState, action: AuthAction): AuthState => {
-  switch (action.type) {
-    case 'AUTH_START':
-      return { ...state, isLoading: true };
-    case 'AUTH_SUCCESS':
-      return {
-        ...state,
-        user: action.payload.user,
-        token: action.payload.token,
-        isLoading: false,
-        isAuthenticated: true,
-      };
-    case 'AUTH_FAILURE':
-      return {
-        ...state,
-        user: null,
-        token: null,
-        isLoading: false,
-        isAuthenticated: false,
-      };
-    case 'LOGOUT':
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      return {
-        ...state,
-        user: null,
-        token: null,
-        isLoading: false,
-        isAuthenticated: false,
-      };
-    case 'INITIALIZE':
-      if (action.payload) {
-        return {
-          ...state,
-          user: action.payload.user,
-          token: action.payload.token,
-          isLoading: false,
-          isAuthenticated: true,
-        };
-      }
-      return {
-        ...state,
-        isLoading: false,
-        isAuthenticated: false,
-      };
-    default:
-      return state;
-  }
-};
-
-// Helper function to map backend roles to frontend roles
-const mapBackendRoleToFrontendRole = (backendRole: string): 'ADMIN' | 'DOCTOR' | 'HELPDESK' => {
+// Role mapping utilities
+export const mapBackendRoleToFrontendRole = (backendRole: BackendRole): FrontendRole => {
   switch (backendRole) {
     case 'ROLE_ADMIN':
       return 'ADMIN';
@@ -96,94 +33,117 @@ const mapBackendRoleToFrontendRole = (backendRole: string): 'ADMIN' | 'DOCTOR' |
   }
 };
 
-interface AuthContextType {
+export const hasRole = (user: User | null, role: FrontendRole): boolean => {
+  if (!user) return false;
+  return user.roles.some(backendRole => mapBackendRoleToFrontendRole(backendRole) === role);
+};
+
+export const getPrimaryRole = (user: User | null): FrontendRole | null => {
+  if (!user || !user.roles.length) return null;
+  return mapBackendRoleToFrontendRole(user.roles[0]);
+};
+
+type AuthAction =
+  | { type: 'LOGIN_SUCCESS'; payload: User }
+  | { type: 'LOGIN_FAILURE' }
+  | { type: 'LOGOUT' }
+  | { type: 'SET_LOADING'; payload: boolean };
+
+const initialState: AuthState = {
+  user: null,
+  isAuthenticated: false,
+  isLoading: true,
+};
+
+const AuthContext = createContext<{
   state: AuthState;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
-}
+  hasRole: (role: FrontendRole) => boolean;
+  getPrimaryRole: () => FrontendRole | null;
+}>({
+  state: initialState,
+  login: async () => { },
+  logout: () => { },
+  hasRole: () => false,
+  getPrimaryRole: () => null,
+});
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const authReducer = (state: AuthState, action: AuthAction): AuthState => {
+  switch (action.type) {
+    case 'LOGIN_SUCCESS':
+      return {
+        ...state,
+        user: action.payload,
+        isAuthenticated: true,
+        isLoading: false,
+      };
+    case 'LOGIN_FAILURE':
+      return {
+        ...state,
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      };
+    case 'LOGOUT':
+      return {
+        ...state,
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      };
+    case 'SET_LOADING':
+      return {
+        ...state,
+        isLoading: action.payload,
+      };
+    default:
+      return state;
+  }
+};
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
-    if (token && userStr) {
+    const checkAuth = async () => {
       try {
-        const user = JSON.parse(userStr);
-        dispatch({ type: 'INITIALIZE', payload: { user, token } });
+        const user = await authAPI.getCurrentUser();
+        dispatch({ type: 'LOGIN_SUCCESS', payload: user });
       } catch (error) {
-        console.error('Error parsing stored user data:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        dispatch({ type: 'INITIALIZE', payload: null });
+        dispatch({ type: 'LOGIN_FAILURE' });
       }
-    } else {
-      dispatch({ type: 'INITIALIZE', payload: null });
-    }
+    };
+
+    checkAuth();
   }, []);
 
   const login = async (username: string, password: string) => {
-    dispatch({ type: 'AUTH_START' });
-    
+    dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const response = await fetch('http://localhost:8080/api/auth/signin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Login failed');
-      }
-
-      const data = await response.json();
-      console.log('Backend login response:', data);
-      
-      // Map backend response to frontend format
-      const frontendRole = mapBackendRoleToFrontendRole(data.roles[0]);
-      
-      // Create user object with proper format
-      const user: User = {
-        id: data.id,
-        username: data.username,
-        email: data.email,
-        role: frontendRole,
-        firstName: data.firstName || data.username, // Fallback if firstName not provided
-        lastName: data.lastName || '', // Fallback if lastName not provided
-      };
-
-      console.log('Mapped user object:', user);
-      console.log('User role after mapping:', user.role);
-      
-      // Store token (map accessToken to token) and user data
-      localStorage.setItem('token', data.accessToken);
-      localStorage.setItem('user', JSON.stringify(user));
-      
-      dispatch({
-        type: 'AUTH_SUCCESS',
-        payload: { user, token: data.accessToken },
-      });
+      const response = await authAPI.signin({ username, password });
+      dispatch({ type: 'LOGIN_SUCCESS', payload: response });
     } catch (error) {
-      console.error('Login error:', error);
-      dispatch({ type: 'AUTH_FAILURE' });
+      dispatch({ type: 'LOGIN_FAILURE' });
       throw error;
     }
   };
 
   const logout = () => {
+    authAPI.signout();
     dispatch({ type: 'LOGOUT' });
   };
 
   return (
-    <AuthContext.Provider value={{ state, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        state,
+        login,
+        logout,
+        hasRole: (role) => hasRole(state.user, role),
+        getPrimaryRole: () => getPrimaryRole(state.user)
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -191,7 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
